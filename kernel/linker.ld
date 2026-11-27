@@ -25,6 +25,13 @@ SECTIONS
         *(.text.*)
     } :text
 
+    .userapp ALIGN(0x1000) :
+    {
+        __user_app_start = .;
+        KEEP(*(.userapp))
+        __user_app_end = .;
+    } :text
+
     .rodata ALIGN(0x1000) :
     {
         *(.rodata)
