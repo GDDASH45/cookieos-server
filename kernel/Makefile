@@ -17,7 +17,7 @@ LDFLAGS := -nostdlib -static -z max-page-size=0x1000 \
 
 C_SOURCES := $(shell find src -type f -name '*.c' -print)
 C_OBJECTS := $(C_SOURCES:.c=.o)
-OBJECTS := entry.o arch/x86_64/ring3.o arch/x86_64/demo_app.o $(C_OBJECTS)
+OBJECTS := entry.o arch/x86_64/ring3.o $(C_OBJECTS)
 
 .PHONY: all clean
 
