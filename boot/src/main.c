@@ -933,20 +933,20 @@ EFI_STATUS efi_main(
      */
     if (EFI_ERROR(Status) &&
         StrCmp(Config.Entries[Selected].Kernel,
-               L"\\cookieos\\System\\Recovery\\recovery.ckx") != 0) {
-        Print(L"\\r\\n[RECOVERY] Normal kernel failed to load: %r\\r\\n",
+               L"\\cookieos\\System\\Recovery\recovery.ckx") != 0) {
+        Print(L"\r\n[RECOVERY] Normal kernel failed to load: %r\r\n",
               Status);
-        Print(L"[RECOVERY] Attempting CookieOS Recovery Environment...\\r\\n");
+        Print(L"[RECOVERY] Attempting CookieOS Recovery Environment...\r\n");
 
         Status = load_kernel_and_exit(
             ImageHandle,
             SystemTable,
-            L"\\cookieos\\System\\Recovery\\recovery.ckx"
+            L"\\cookieos\\System\\Recovery\recovery.ckx"
         );
     }
 
     if (EFI_ERROR(Status))
-        Print(L"[RECOVERY] Recovery boot failed: %r\\r\\n", Status);
+        Print(L"[RECOVERY] Recovery boot failed: %r\r\n", Status);
 
     return Status;
 }
