@@ -6,6 +6,7 @@
 #include "../../boot/include/bootinfo.h"
 #include "framebuffer.h"
 #include "driver_loader.h"
+#include <stdint.h>
 
 static __attribute__((noreturn)) void kernel_halt(void)
 {
