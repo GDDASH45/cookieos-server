@@ -177,7 +177,7 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
         if (!read_ok)
             kernel_panic("Could not read \\cookieos\\System\\autoexec.app");
 
-        framebuffer_write("[FAT] Loaded autoexec.app (        framebuffer_write("[FAT] Loaded autoexec.app (");
+        framebuffer_write("[FAT] Loaded autoexec.app (");
         framebuffer_write_dec(app_size);
         framebuffer_write(" bytes)\n");
         usermode_run_app(autoexec_image, app_size);
