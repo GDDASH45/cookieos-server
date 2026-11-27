@@ -265,9 +265,10 @@ static EFI_STATUS load_elf_segments(
 }
 
 /*
- * Build temporary identity mappings for the initial kernel handoff.
- * One PML4, one PDPT, and 512 page directories map the lower 512 GiB
- * with 2 MiB pages. The kernel currently uses physical == virtual addresses.
+ * Build temporary mappings for the initial kernel handoff.
+ * The lower 512 GiB starts as an identity map using 2 MiB pages. Kernel
+ * virtual pages are then remapped to the separately allocated physical
+ * kernel image, preserving the addresses used by the linked executable.
  */
 #define IDENTITY_PDPT_ENTRIES 512
 #define IDENTITY_PAGE_TABLE_PAGES (2 + IDENTITY_PDPT_ENTRIES)
