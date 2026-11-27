@@ -13,13 +13,26 @@
 
 #define COOKIEBOOT_PATH L"\\cookieos\\System\\Boot\\CookieBoot.efi"
 
-EFI_STATUS EFIAPI
+EFI_STATUS
 efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 {
     EFI_STATUS Status;
     EFI_LOADED_IMAGE *LoadedImage = NULL;
     EFI_DEVICE_PATH *DevicePath = NULL;
     EFI_HANDLE CookieBootImage = NULL;
+
+    /*
+     * Print through the firmware console before initializing GNU-EFI.
+     * This confirms that the firmware reached the application entry.
+     */
+    if (SystemTable != NULL && SystemTable->ConOut != NULL) {
+        uefi_call_wrapper(
+            SystemTable->ConOut->OutputString,
+            2,
+            SystemTable->ConOut,
+            L"BOOTX64: UEFI entry point reached.\r\n"
+        );
+    }
 
     InitializeLib(ImageHandle, SystemTable);
 
