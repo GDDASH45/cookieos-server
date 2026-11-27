@@ -141,7 +141,7 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
         framebuffer_write("[DRIVER] Skipping preload: CookieBoot uses ABI v1.\\n");
 
     framebuffer_write("[MT] Early initialization complete.\n");
-    framebuffer_write("[STORAGE] Initializing primary ATA device...\n");
+    framebuffer_write("[STORAGE] Initializing PCI AHCI SATA controller...\n");
     if (!fat_init())
         kernel_panic("Could not initialize ATA disk or FAT16/32 volume");
 
