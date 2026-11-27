@@ -67,7 +67,6 @@ extern void arch_load_tr(void);
 extern void arch_enter_user(uint64_t entry, uint64_t stack)
     __attribute__((noreturn));
 extern void ring3_syscall_entry(void);
-extern char kernel_stack_top[];
 extern char user_demo_entry[];
 extern char user_demo_page[];
 
@@ -81,6 +80,7 @@ static uint64_t page_directories[512][512]
     __attribute__((aligned(4096)));
 static uint64_t user_page_table[512] __attribute__((aligned(4096)));
 static uint8_t user_stack_page[4096] __attribute__((aligned(4096)));
+static uint8_t ring3_kernel_stack[16384] __attribute__((aligned(16)));
 
 static void set_tss_descriptor(uint64_t base, uint32_t limit)
 {
@@ -115,7 +115,8 @@ static void setup_gdt_tss(void)
     gdt[3] = 0x00cff2000000ffffULL;
     gdt[4] = 0x00affa000000ffffULL;
 
-    tss.rsp0 = (uint64_t)(uintptr_t)kernel_stack_top;
+    tss.rsp0 = (uint64_t)(uintptr_t)(ring3_kernel_stack +
+                                      sizeof(ring3_kernel_stack));
     tss.iomap_base = sizeof(tss);
     set_tss_descriptor((uint64_t)(uintptr_t)&tss,
                        (uint32_t)sizeof(tss) - 1U);
@@ -215,9 +216,9 @@ void syscall_dispatch(SYSCALL_FRAME *frame)
         size_t length = (size_t)frame->rsi;
         size_t i;
 
-        if (message < (const char *)(uintptr_t)USER_BASE ||
+        if ((uintptr_t)message < USER_BASE ||
             length > 256 ||
-            (uintptr_t)message + length > USER_BASE + 4096ULL) {
+            (uintptr_t)message > USER_BASE + 4096ULL - length) {
             framebuffer_write("[SYSCALL] Rejected invalid user buffer\n");
             return;
         }
