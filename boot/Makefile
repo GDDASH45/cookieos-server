@@ -30,17 +30,21 @@ chainloader.o: chainloader.c
 	@echo "  CC      $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-main.o: src/main.c
+main.o: src/main.c include/elf_loader.h include/bootinfo.h
 	@echo "  CC      $<"
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -Iinclude -c $< -o $@
+
+elf.o: src/elf.c include/elf_loader.h include/bootinfo.h
+	@echo "  CC      $<"
+	@$(CC) $(CFLAGS) -Iinclude -c $< -o $@
 
 chainloader.so: chainloader.o
 	@echo "  LD      $@"
 	@$(LD) $(LDFLAGS) $(EFI_CRT0) $< $(EFI_LIBS) -o $@
 
-CookieBoot.so: main.o
+CookieBoot.so: main.o elf.o
 	@echo "  LD      $@"
-	@$(LD) $(LDFLAGS) $(EFI_CRT0) $< $(EFI_LIBS) -o $@
+	@$(LD) $(LDFLAGS) $(EFI_CRT0) main.o elf.o $(EFI_LIBS) -o $@
 
 BOOTX64.EFI: chainloader.so
 	@echo "  EFI     $@"
@@ -51,5 +55,5 @@ CookieBoot.efi: CookieBoot.so
 	@$(OBJCOPY) $(EFI_SECTIONS) --target=efi-app-$(ARCH) $< $@
 
 clean:
-	@rm -f chainloader.o main.o chainloader.so CookieBoot.so \
+	@rm -f chainloader.o main.o elf.o chainloader.so CookieBoot.so \
 		BOOTX64.EFI CookieBoot.efi
