@@ -8,6 +8,7 @@
 #include <bootinfo.h>
 
 void framebuffer_init(const COOKIEOS_BOOT_INFO *info);
+void framebuffer_clear(void);
 int framebuffer_available(void);
 void framebuffer_putc(char c);
 void framebuffer_write(const char *text);
