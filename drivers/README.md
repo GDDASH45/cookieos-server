@@ -1,23 +1,41 @@
 # CookieOS Server driver build system
 
-All native drivers are built as x86-64 ELF relocatable objects with the
-`.sys` extension. For example, the `hello` driver produces
-`hello.sys`.
+Native drivers are x86-64 ELF relocatable objects with the `.sys` extension.
+For example, the `hello` driver produces `hello.sys`.
 
-The files are ELF64 `ET_REL` objects, not standalone executables. They
-contain sections, symbols, and relocation records for a future kernel
-module loader to process.
+## Installing drivers
+
+Copy driver files to this directory on the EFI System Partition:
+
+```text
+\cookieos\System\Drivers\
+```
+
+CookieBoot scans that directory, preloads up to 16 `.sys` files, and passes
+their memory locations to the kernel in boot-information ABI version 2.
+The kernel validates each ELF64 `ET_REL` image, lays out its allocatable
+sections, applies supported x86-64 RELA relocations, checks the driver
+metadata, and calls `driver_init()`.
+
+The current loader supports local symbols and these relocations:
+`R_X86_64_64`, `R_X86_64_PC32`, `R_X86_64_PLT32`,
+`R_X86_64_32`, and `R_X86_64_32S`.
+
+Undefined imports are rejected. Kernel service exports, dependencies,
+unloading, and memory reclamation are not implemented yet. Driver code is
+placed in a dedicated executable module pool; page-level permission
+hardening will be added with the kernel's own memory manager.
 
 ## Driver ABI
 
-A driver includes `<driver.h>`, defines the metadata record with
-`COOKIEOS_DRIVER_METADATA(name, version)`, and exports:
+Include `<driver.h>`, define metadata with
+`COOKIEOS_DRIVER_METADATA(name, version)`, and export:
 
 - `int driver_init(void)`: return zero when initialization succeeds.
 - `void driver_exit(void)`: release resources during unload.
 
-The current ABI is version 1. Kernel service imports, dependency handling,
-relocation processing, and runtime loading are not implemented yet.
+The current ABI version is 1. Each driver is linked independently, so
+each may use the same entry-point symbol names.
 
 ## Building
 
