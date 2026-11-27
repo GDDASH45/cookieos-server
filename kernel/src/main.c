@@ -145,14 +145,22 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
     __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'6'));
 
     framebuffer_write("\n[MT] Kernel entry reached successfully.\n");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'7'));
     framebuffer_write("[MT] GOP framebuffer console initialized.\n");
-    if (info->version >= 2U)
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'8'));
+    if (info->version >= 2U) {
+        __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'R'));
         driver_load_all(info);
-    else
+        __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'r'));
+    } else {
         framebuffer_write("[DRIVER] Skipping preload: CookieBoot uses ABI v1.\\n");
+        __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'r'));
+    }
 
     framebuffer_write("[MT] Early initialization complete.\n");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'9'));
     framebuffer_write("[STORAGE] Initializing PCI AHCI SATA controller...\n");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'T'));
     if (!fat_init(info->kernel_physical_base, info->kernel_size))
         kernel_panic("Could not initialize AHCI disk or FAT16/32 volume");
 
