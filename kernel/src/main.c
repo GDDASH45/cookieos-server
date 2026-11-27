@@ -142,7 +142,7 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
 
     framebuffer_write("[MT] Early initialization complete.\n");
     framebuffer_write("[STORAGE] Initializing PCI AHCI SATA controller...\n");
-    if (!fat_init())
+    if (!fat_init(info->kernel_physical_base, info->kernel_size))
         kernel_panic("Could not initialize AHCI disk or FAT16/32 volume");
 
     framebuffer_write("[FAT] Reading \\cookieos\\System\\autoexec.app...\n");
