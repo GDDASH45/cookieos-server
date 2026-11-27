@@ -22,6 +22,11 @@ static uint32_t cursor_y;
 static uint32_t foreground = 0x00D8E8F0U;
 static uint32_t background = 0x00000000U;
 
+static void framebuffer_debug(char marker)
+{
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((uint8_t)marker));
+}
+
 static const uint8_t *glyph(char c)
 {
     static const uint8_t blank[7] = {0,0,0,0,0,0,0};
@@ -126,18 +131,50 @@ static void newline(void)
 
 void framebuffer_init(const COOKIEOS_BOOT_INFO *info)
 {
-    size_t required;
-    if (!info || !info->framebuffer_base || !info->framebuffer_width ||
-        !info->framebuffer_height ||
-        info->framebuffer_pixels_per_scanline < info->framebuffer_width ||
-        (info->framebuffer_pixel_format != 0U &&
-         info->framebuffer_pixel_format != 1U))
-        return;
+    uint64_t required;
+    uint64_t framebuffer_end;
 
-    required = (size_t)info->framebuffer_pixels_per_scanline *
-               info->framebuffer_height * 4U;
-    if (info->framebuffer_size < required)
+    if (!info) {
+        framebuffer_debug('1');
         return;
+    }
+    if (!info->framebuffer_base) {
+        framebuffer_debug('2');
+        return;
+    }
+    if (!info->framebuffer_width || !info->framebuffer_height ||
+        info->framebuffer_pixels_per_scanline < info->framebuffer_width) {
+        framebuffer_debug('3');
+        return;
+    }
+    if (info->framebuffer_pixel_format != 0U &&
+        info->framebuffer_pixel_format != 1U) {
+        framebuffer_debug('4');
+        return;
+    }
+
+    required = (uint64_t)info->framebuffer_pixels_per_scanline *
+               (uint64_t)info->framebuffer_height * 4ULL;
+    if (!required || info->framebuffer_size < required) {
+        framebuffer_debug('5');
+        return;
+    }
+
+    /*
+     * CookieBoot currently identity-maps physical addresses below 512 GiB.
+     * Reject a GOP range outside that mapping instead of touching an unmapped
+     * framebuffer and taking a page fault.
+     */
+    if (info->framebuffer_base >= 0x8000000000ULL ||
+        required > 0x8000000000ULL - info->framebuffer_base) {
+        framebuffer_debug('6');
+        return;
+    }
+    framebuffer_end = info->framebuffer_base + required;
+    if (framebuffer_end <= info->framebuffer_base) {
+        framebuffer_debug('7');
+        return;
+    }
 
     fb = (volatile uint8_t *)(uintptr_t)info->framebuffer_base;
     fb_width = info->framebuffer_width;
@@ -146,7 +183,7 @@ void framebuffer_init(const COOKIEOS_BOOT_INFO *info)
     fb_format = info->framebuffer_pixel_format;
     cursor_x = 8;
     cursor_y = 8;
-    framebuffer_clear();
+    framebuffer_debug('I');
 }
 
 static uint16_t read_le16(const uint8_t *p)
