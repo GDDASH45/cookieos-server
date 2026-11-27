@@ -284,7 +284,7 @@ static EFI_STATUS parse_config_line(
 
                 Print(L"[DEBUG] Found [boot].\r\n");
 
-            } else if (ascii_strncmp(Section, "entry=", 6) == 0) {
+            } else if (ascii_strncmp(Section, "entry=", 6)) {
                 CHAR8 *Name = trim(Section + 6);
 
                 if (*Name == '\0') {
