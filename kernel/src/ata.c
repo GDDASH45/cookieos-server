@@ -142,6 +142,7 @@ int ata_init(uint64_t physical_base, uint64_t image_size)
     uint8_t bus,dev,fn;
     uint32_t bar,pi,cap;
     unsigned i;
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'a'));
     if(initialized)return 1;
     if(!physical_base || !image_size)return 0;
 
@@ -152,14 +153,17 @@ int ata_init(uint64_t physical_base, uint64_t image_size)
        !dma_physical_address(&command_table,sizeof(command_table),&command_table_physical) ||
        !dma_physical_address(dma_buffer,sizeof(dma_buffer),&dma_buffer_physical))
         return 0;
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'b'));
 
     if(!find_ahci(&bus,&dev,&fn,&bar))return 0;
 
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'c'));
     /* Enable PCI memory-space decoding and bus mastering. */
     {
         uint32_t command=pci_read(bus,dev,fn,4);
         pci_write(bus,dev,fn,4,(command&0xFFFFU)|0x00000006U);
     }
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'d'));
     abar=(volatile uint8_t *)(uintptr_t)bar;
     cap=mmio_read(abar,HBA_CAP);
     if(!(cap&(1U<<31)) &&
@@ -169,6 +173,7 @@ int ata_init(uint64_t physical_base, uint64_t image_size)
         dma_buffer_physical>0xFFFFFFFFULL))
         return 0;
 
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'e'));
     mmio_write(abar,HBA_GHC,mmio_read(abar,HBA_GHC)|HBA_AE);
     pi=mmio_read(abar,HBA_PI);
     for(i=0;i<32;i++){
@@ -179,13 +184,16 @@ int ata_init(uint64_t physical_base, uint64_t image_size)
         ssts=mmio_read(candidate,PORT_SSTS);
         signature=mmio_read(candidate,PORT_SIG);
         if((ssts&0x0FU)!=3U||signature!=SATA_SIG_ATA)continue;
+        __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'f'));
         port=candidate;
         cmd=mmio_read(port,PORT_CMD);
         mmio_write(port,PORT_CMD,cmd&~CMD_ST);
         if(!wait_clear(port,PORT_CMD,CMD_CR))return 0;
+        __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'g'));
         cmd=mmio_read(port,PORT_CMD);
         mmio_write(port,PORT_CMD,cmd&~CMD_FRE);
         if(!wait_clear(port,PORT_CMD,CMD_FR))return 0;
+        __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'h'));
         mmio_write(port,PORT_CLB,(uint32_t)command_list_physical);
         mmio_write(port,PORT_CLB+4,(uint32_t)(command_list_physical>>32));
         mmio_write(port,PORT_FB,(uint32_t)received_fis_physical);
@@ -195,6 +203,7 @@ int ata_init(uint64_t physical_base, uint64_t image_size)
         cmd=mmio_read(port,PORT_CMD);
         mmio_write(port,PORT_CMD,cmd|CMD_FRE);
         mmio_write(port,PORT_CMD,mmio_read(port,PORT_CMD)|CMD_ST);
+        __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'i'));
         initialized=1;
         return 1;
     }
