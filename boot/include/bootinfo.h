@@ -6,7 +6,13 @@
 #define COOKIEOS_BOOTINFO_H
 
 #define COOKIEOS_BOOTINFO_MAGIC 0x434F4F4B49454249ULL
-#define COOKIEOS_BOOTINFO_VERSION 1
+#define COOKIEOS_BOOTINFO_VERSION 2U
+#define COOKIEOS_BOOT_MAX_DRIVERS 16U
+
+typedef struct {
+    unsigned long long image;
+    unsigned long long image_size;
+} COOKIEOS_BOOT_DRIVER;
 
 typedef struct {
     unsigned long long magic;
@@ -31,6 +37,10 @@ typedef struct {
     unsigned long long kernel_physical_base;
     unsigned long long kernel_size;
     unsigned long long kernel_entry;
+
+    unsigned int driver_count;
+    unsigned int reserved1;
+    COOKIEOS_BOOT_DRIVER drivers[COOKIEOS_BOOT_MAX_DRIVERS];
 } COOKIEOS_BOOT_INFO;
 
 #endif
