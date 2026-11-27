@@ -155,11 +155,13 @@ static void setup_user_page_tables(void)
         pdpt[i] = 0;
     }
 
-    pml4[0] = (uint64_t)(uintptr_t)pdpt | PAGE_PRESENT | PAGE_WRITE;
+    pml4[0] = (uint64_t)(uintptr_t)pdpt |
+              PAGE_PRESENT | PAGE_WRITE | PAGE_USER;
 
     for (i = 0; i < 512; ++i) {
         pdpt[i] = (uint64_t)(uintptr_t)page_directories[i] |
-                  PAGE_PRESENT | PAGE_WRITE;
+                  PAGE_PRESENT | PAGE_WRITE |
+                  (i == 1 ? PAGE_USER : 0);
         for (j = 0; j < 512; ++j) {
             uint64_t physical =
                 (((uint64_t)i * 512ULL) + j) * 0x200000ULL;
