@@ -5,6 +5,7 @@
 
 .section .text
 .global _start
+.global kernel_stack_top
 .type _start, @function
 
 _start:
