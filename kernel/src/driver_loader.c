@@ -86,7 +86,7 @@ typedef struct {
 } LOADED_DRIVER;
 
 static unsigned char driver_pool[DRIVER_POOL_SIZE]
-    __attribute__((aligned(4096)));
+    __attribute__((aligned(4096), section(".driver_pool")));
 static size_t driver_pool_used;
 static LOADED_DRIVER loaded_drivers[COOKIEOS_BOOT_MAX_DRIVERS];
 static unsigned int loaded_driver_count;
