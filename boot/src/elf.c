@@ -77,6 +77,7 @@ static EFI_STATUS read_entire_file(
     EFI_STATUS Status;
     EFI_FILE_HANDLE File = NULL;
     EFI_FILE_INFO *Info = NULL;
+    EFI_GUID FileInfoGuid = EFI_FILE_INFO_ID;
     UINTN InfoSize = SIZE_OF_EFI_FILE_INFO + 256;
     UINTN ReadSize;
 
@@ -93,7 +94,7 @@ static EFI_STATUS read_entire_file(
     }
 
     Status = uefi_call_wrapper(File->GetInfo, 4, File,
-                               &FileInfo, &InfoSize, Info);
+                               &FileInfoGuid, &InfoSize, Info);
     if (EFI_ERROR(Status)) {
         uefi_call_wrapper(BS->FreePool, 1, Info);
         uefi_call_wrapper(File->Close, 1, File);
@@ -256,12 +257,14 @@ static EFI_STATUS load_elf_segments(
 static UINT64 find_acpi_rsdp(EFI_SYSTEM_TABLE *SystemTable)
 {
     UINTN i;
+    EFI_GUID Acpi20Guid = ACPI_20_TABLE_GUID;
+    EFI_GUID AcpiGuid = ACPI_TABLE_GUID;
 
     for (i = 0; i < SystemTable->NumberOfTableEntries; ++i) {
         EFI_CONFIGURATION_TABLE *table = &SystemTable->ConfigurationTable[i];
 
-        if (CompareGuid(&table->VendorGuid, &ACPI_20_TABLE_GUID) ||
-            CompareGuid(&table->VendorGuid, &ACPI_TABLE_GUID))
+        if (CompareGuid(&table->VendorGuid, &Acpi20Guid) ||
+            CompareGuid(&table->VendorGuid, &AcpiGuid))
             return (UINT64)(UINTN)table->VendorTable;
     }
 
