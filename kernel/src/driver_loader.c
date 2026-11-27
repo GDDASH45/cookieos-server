@@ -287,7 +287,7 @@ static int load_one_driver(const COOKIEOS_BOOT_DRIVER *boot_driver)
     const char *strings;
     size_t symbol_count;
     unsigned int i;
-    void (*init)(void) = NULL;
+    int (*init)(void) = NULL;
     void (*exit_fn)(void) = NULL;
     const DRIVER_INFO *metadata = NULL;
 
@@ -365,7 +365,7 @@ static int load_one_driver(const COOKIEOS_BOOT_DRIVER *boot_driver)
                             eh->shnum, &address))
             continue;
         if (name_equals(strings + symbols[i].name, "driver_init"))
-            init = (void (*)(void))address;
+            init = (int (*)(void))address;
         else if (name_equals(strings + symbols[i].name, "driver_exit"))
             exit_fn = (void (*)(void))address;
         else if (name_equals(strings + symbols[i].name,
