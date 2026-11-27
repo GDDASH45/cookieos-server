@@ -1,4 +1,4 @@
-/* CookieOS Server 2026 - read-only FAT12/16/32 filesystem
+/* CookieOS Server 2026 - read-only FAT16/32 filesystem
  * SPDX-License-Identifier: GPL-2.0-only
  */
 #include "fat.h"
