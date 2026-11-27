@@ -130,12 +130,19 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
 
     framebuffer_clear();
     __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'D'));
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'W'));
     framebuffer_write("\n========================================\n");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'1'));
     framebuffer_write(" CookieOS Server 2026\n");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'2'));
     framebuffer_write(" Modular Technology kernel\n");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'3'));
     framebuffer_write("========================================\n");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'4'));
     framebuffer_write("[BOOT] CookieBoot handoff validated\n");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'5'));
     print_boot_info(info);
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'6'));
 
     framebuffer_write("\n[MT] Kernel entry reached successfully.\n");
     framebuffer_write("[MT] GOP framebuffer console initialized.\n");
