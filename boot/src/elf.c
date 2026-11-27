@@ -648,7 +648,7 @@ EFI_STATUS load_kernel_and_exit(
         UINTN SplashSize = 0;
         Status = read_entire_file(
             Root,
-            L"\\\\cookieos\\\\System\\\\Resources\\\\splash.bmp",
+            L"\\cookieos\\System\\Resources\\splash.bmp",
             &Splash,
             &SplashSize
         );
