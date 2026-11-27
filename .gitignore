@@ -3,3 +3,5 @@
 *.ckx
 *.map
 *.sys
+*.app
+*.so
