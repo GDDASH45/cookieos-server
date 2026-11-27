@@ -4,7 +4,6 @@
  */
 #ifndef COOKIEOS_USERMODE_H
 #define COOKIEOS_USERMODE_H
-
-void usermode_run_demo(void) __attribute__((noreturn));
-
+#include <stddef.h>
+void usermode_run_app(const void *image, size_t size) __attribute__((noreturn));
 #endif
