@@ -26,19 +26,19 @@ all: $(TARGET).efi
 
 main.o: src/main.c
 	@echo "  CC      $<"
-	$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -c $< -o $@
 
 $(TARGET).so: $(OBJECTS)
 	@echo "  LD      $@"
-	$(LD) $(LDFLAGS) $(EFI_CRT0) $(OBJECTS) \
+	@$(LD) $(LDFLAGS) $(EFI_CRT0) $(OBJECTS) \
 		-L$(EFI_LIB) -lefi -lgnuefi -o $@
 
 $(TARGET).efi: $(TARGET).so
 	@echo "  EFI     $@"
-	$(OBJCOPY) -j .text -j .sdata -j .data \
+	@$(OBJCOPY) -j .text -j .sdata -j .data \
 		-j .dynamic -j .dynsym -j .rel \
 		-j .rela -j .reloc \
 		--target=efi-app-$(ARCH) $< $@
 
 clean:
-	rm -f $(OBJECTS) $(TARGET).so $(TARGET).efi
+	@rm -f $(OBJECTS) $(TARGET).so $(TARGET).efi
