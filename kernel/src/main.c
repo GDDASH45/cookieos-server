@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 
-#include <bootinfo.h>
+#include "../../boot/include/bootinfo.h"
 #include "framebuffer.h"
 #include "driver_loader.h"
 
@@ -90,12 +90,21 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
         kernel_panic("Invalid boot-information magic");
     __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)0x47));
 
-    if (info->version != COOKIEOS_BOOTINFO_VERSION)
+    /*
+     * ABI v1 predates the preloaded-driver array. Accept it so an older
+     * CookieBoot on the ESP can still boot this kernel safely.
+     */
+    if (info->version != 1U &&
+        info->version != COOKIEOS_BOOTINFO_VERSION)
         kernel_panic("Unsupported boot-information ABI version");
     __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)0x56));
 
-    if (info->size < sizeof(COOKIEOS_BOOT_INFO))
-        kernel_panic("Boot-information structure is too small");
+    if (info->version == 1U) {
+        if (info->size < __builtin_offsetof(COOKIEOS_BOOT_INFO, driver_count))
+            kernel_panic("ABI v1 boot-information structure is too small");
+    } else if (info->size < sizeof(COOKIEOS_BOOT_INFO)) {
+        kernel_panic("ABI v2 boot-information structure is too small");
+    }
     __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)0x5A));
 
     __asm__ __volatile__(
@@ -121,7 +130,10 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
 
     framebuffer_write("\n[MT] Kernel entry reached successfully.\n");
     framebuffer_write("[MT] GOP framebuffer console initialized.\n");
-    driver_load_all(info);
+    if (info->version >= 2U)
+        driver_load_all(info);
+    else
+        framebuffer_write("[DRIVER] Skipping preload: CookieBoot uses ABI v1.\\n");
 
     framebuffer_write("[MT] Early initialization complete.\n");
     framebuffer_write("[MT] CPU is halted until the next kernel subsystem is added.\n");
