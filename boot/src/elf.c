@@ -639,6 +639,29 @@ EFI_STATUS load_kernel_and_exit(
     Info->kernel_entry = PhysicalEntry;
     collect_framebuffer(Info);
 
+    /*
+     * Preload the optional splash bitmap before ExitBootServices().
+     * The kernel receives the file buffer through bootinfo ABI v3.
+     */
+    {
+        VOID *Splash = NULL;
+        UINTN SplashSize = 0;
+        Status = read_entire_file(
+            Root,
+            L"\\\\cookieos\\\\System\\\\Resources\\\\splash.bmp",
+            &Splash,
+            &SplashSize
+        );
+        if (!EFI_ERROR(Status)) {
+            Info->splash_image = (UINT64)(UINTN)Splash;
+            Info->splash_image_size = SplashSize;
+            Print(L"[SPLASH] Preloaded splash.bmp (%u bytes).\\r\\n",
+                  SplashSize);
+        } else {
+            Print(L"[SPLASH] splash.bmp unavailable; continuing without it.\\r\\n");
+        }
+    }
+
     Status = load_driver_images(Root, Info);
     uefi_call_wrapper(Root->Close, 1, Root);
     Root = NULL;
