@@ -2,10 +2,8 @@
  * CookieOS Server 2026 - x86-64 privilege transition and syscall entry
  * SPDX-License-Identifier: GPL-2.0-only
  */
-
 .section .text
 .code64
-
 .global arch_load_gdt
 .type arch_load_gdt, @function
 arch_load_gdt:
@@ -20,20 +18,17 @@ arch_load_gdt:
     movw %ax, %es
     movw %ax, %ss
     ret
-
 .global arch_load_idt
 .type arch_load_idt, @function
 arch_load_idt:
     lidt (%rdi)
     ret
-
 .global arch_load_tr
 .type arch_load_tr, @function
 arch_load_tr:
     movw $0x28, %ax
     ltr %ax
     ret
-
 .global arch_enter_user
 .type arch_enter_user, @function
 arch_enter_user:
@@ -47,7 +42,6 @@ arch_enter_user:
     pushq $0x23
     pushq %rdi
     iretq
-
 .global ring3_syscall_entry
 .type ring3_syscall_entry, @function
 ring3_syscall_entry:
@@ -85,5 +79,14 @@ ring3_syscall_entry:
     popq %rbx
     popq %rax
     iretq
-
+.global ring3_fatal_exception
+.type ring3_fatal_exception, @function
+ring3_fatal_exception:
+    cli
+    movw $0xE9, %dx
+    movb $'X', %al
+    outb %al, %dx
+2:
+    hlt
+    jmp 2b
 .section .note.GNU-stack,"",@progbits
