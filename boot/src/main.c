@@ -68,7 +68,8 @@ static CHAR8 *trim(CHAR8 *Text)
         ++End;
 
     while (End > Text &&
-           (End[-1] == ' ' || End[-1] == '\t'))
+           (End[-1] == ' ' || End[-1] == '\t' ||
+            End[-1] == '\r' || End[-1] == '\n'))
         --End;
 
     *End = '\0';
