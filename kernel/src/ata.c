@@ -10,6 +10,7 @@
 #define AHCI_CLASS 0x01
 #define AHCI_SUBCLASS 0x06
 #define AHCI_PROGIF 0x01
+#define HBA_CAP 0x00
 #define HBA_GHC 0x04
 #define HBA_PI 0x0C
 #define HBA_PORT_BASE 0x100
@@ -47,7 +48,34 @@ static AHCI_COMMAND_TABLE command_table;
 static uint8_t dma_buffer[512] __attribute__((aligned(512)));
 static volatile uint8_t *abar;
 static volatile uint8_t *port;
+static uint64_t kernel_physical_base;
+static uint64_t kernel_size;
+static uint64_t command_list_physical;
+static uint64_t received_fis_physical;
+static uint64_t command_table_physical;
+static uint64_t dma_buffer_physical;
 static int initialized;
+
+extern char __kernel_start[];
+
+static int dma_physical_address(const void *address, uint64_t length,
+                                uint64_t *physical)
+{
+    uintptr_t virtual_base = (uintptr_t)__kernel_start;
+    uintptr_t virtual_address = (uintptr_t)address;
+    uint64_t offset;
+
+    if (!physical || virtual_address < virtual_base)
+        return 0;
+    offset = (uint64_t)(virtual_address - virtual_base);
+    if (offset > kernel_size || length > kernel_size - offset)
+        return 0;
+    if (kernel_physical_base > UINT64_MAX - offset)
+        return 0;
+
+    *physical = kernel_physical_base + offset;
+    return 1;
+}
 
 static inline void outl(uint16_t p,uint32_t v)
 {
@@ -109,12 +137,22 @@ static int wait_clear(volatile uint8_t *p,uint32_t reg,uint32_t mask)
     while(n--)if(!(mmio_read(p,reg)&mask))return 1;
     return 0;
 }
-int ata_init(void)
+int ata_init(uint64_t physical_base, uint64_t image_size)
 {
     uint8_t bus,dev,fn;
-    uint32_t bar,pi;
+    uint32_t bar,pi,cap;
     unsigned i;
     if(initialized)return 1;
+    if(!physical_base || !image_size)return 0;
+
+    kernel_physical_base=physical_base;
+    kernel_size=image_size;
+    if(!dma_physical_address(&command_list,sizeof(command_list),&command_list_physical) ||
+       !dma_physical_address(&received_fis,sizeof(received_fis),&received_fis_physical) ||
+       !dma_physical_address(&command_table,sizeof(command_table),&command_table_physical) ||
+       !dma_physical_address(dma_buffer,sizeof(dma_buffer),&dma_buffer_physical))
+        return 0;
+
     if(!find_ahci(&bus,&dev,&fn,&bar))return 0;
 
     /* Enable PCI memory-space decoding and bus mastering. */
@@ -123,6 +161,14 @@ int ata_init(void)
         pci_write(bus,dev,fn,4,(command&0xFFFFU)|0x00000006U);
     }
     abar=(volatile uint8_t *)(uintptr_t)bar;
+    cap=mmio_read(abar,HBA_CAP);
+    if(!(cap&(1U<<31)) &&
+       (command_list_physical>0xFFFFFFFFULL ||
+        received_fis_physical>0xFFFFFFFFULL ||
+        command_table_physical>0xFFFFFFFFULL ||
+        dma_buffer_physical>0xFFFFFFFFULL))
+        return 0;
+
     mmio_write(abar,HBA_GHC,mmio_read(abar,HBA_GHC)|HBA_AE);
     pi=mmio_read(abar,HBA_PI);
     for(i=0;i<32;i++){
@@ -140,10 +186,10 @@ int ata_init(void)
         cmd=mmio_read(port,PORT_CMD);
         mmio_write(port,PORT_CMD,cmd&~CMD_FRE);
         if(!wait_clear(port,PORT_CMD,CMD_FR))return 0;
-        mmio_write(port,PORT_CLB,(uint32_t)(uintptr_t)&command_list);
-        mmio_write(port,PORT_CLB+4,0);
-        mmio_write(port,PORT_FB,(uint32_t)(uintptr_t)&received_fis);
-        mmio_write(port,PORT_FB+4,0);
+        mmio_write(port,PORT_CLB,(uint32_t)command_list_physical);
+        mmio_write(port,PORT_CLB+4,(uint32_t)(command_list_physical>>32));
+        mmio_write(port,PORT_FB,(uint32_t)received_fis_physical);
+        mmio_write(port,PORT_FB+4,(uint32_t)(received_fis_physical>>32));
         mmio_write(port,PORT_IS,0xFFFFFFFFU);
         mmio_write(port,PORT_SERR,0xFFFFFFFFU);
         cmd=mmio_read(port,PORT_CMD);
@@ -175,8 +221,8 @@ int ata_read_sector(uint32_t lba,void *buffer)
     header[1]=0;
     header[2]=1;
     header[3]=0;
-    *(volatile uint32_t *)(header+8)=(uint32_t)(uintptr_t)&command_table;
-    *(volatile uint32_t *)(header+12)=0;
+    *(volatile uint32_t *)(header+8)=(uint32_t)command_table_physical;
+    *(volatile uint32_t *)(header+12)=(uint32_t)(command_table_physical>>32);
 
     fis[0]=0x27;             /* Register Host-to-Device FIS. */
     fis[1]=0x80;             /* Command bit. */
@@ -191,8 +237,8 @@ int ata_read_sector(uint32_t lba,void *buffer)
     fis[12]=1;               /* Sector count low. */
     fis[13]=0;
 
-    *(volatile uint32_t *)(table+0x80)=(uint32_t)(uintptr_t)dma_buffer;
-    *(volatile uint32_t *)(table+0x84)=0;
+    *(volatile uint32_t *)(table+0x80)=(uint32_t)dma_buffer_physical;
+    *(volatile uint32_t *)(table+0x84)=(uint32_t)(dma_buffer_physical>>32);
     *(volatile uint32_t *)(table+0x8C)=511U|(1U<<31);
 
     {
