@@ -9,7 +9,7 @@ EFI_CRT0 := $(EFI_LIB)/crt0-efi-$(ARCH).o
 EFI_LDS := $(EFI_LIB)/elf_$(ARCH)_efi.lds
 
 CFLAGS := -I$(EFI_INC) -I$(EFI_INC)/$(ARCH) \
-          -DEFI_FUNCTION_WRAPPER \
+          -DEFI_FUNCTION_WRAPPER -fshort-wchar \
           -fpic -ffreestanding -fno-stack-protector \
           -fno-stack-check -mno-red-zone \
           -maccumulate-outgoing-args
