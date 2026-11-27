@@ -847,7 +847,6 @@ EFI_STATUS efi_main(
     EFI_STATUS Status;
 
     EFI_FILE_HANDLE Root = NULL;
-    EFI_FILE_HANDLE KernelFile = NULL;
 
     BOOT_CONFIG Config;
     UINTN Selected;
