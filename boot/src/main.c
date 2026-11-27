@@ -7,6 +7,7 @@
 
 #include <efi.h>
 #include <efilib.h>
+#include "../include/elf_loader.h"
 
 #define BOOT_INI_PATH L"\\boot.ini"
 
@@ -914,48 +915,15 @@ EFI_STATUS efi_main(
     }
 
     /*
-     * Open selected kernel.
+     * Transfer control to the selected ELF64 kernel.
+     * The ELF loader exits boot services and passes COOKIEOS_BOOT_INFO
+     * in RDI at the kernel entry point.
      */
-    Print(
-        L"[BOOT] Selected: %s\r\n",
-        Config.Entries[Selected].Title
-    );
-
-    Print(
-        L"[BOOT] Opening %s...\r\n",
-        Config.Entries[Selected].Kernel
-    );
-
-    Status = uefi_call_wrapper(
-        Root->Open,
-        5,
-        Root,
-        &KernelFile,
-        Config.Entries[Selected].Kernel,
-        EFI_FILE_MODE_READ,
-        0
-    );
-
     uefi_call_wrapper(Root->Close, 1, Root);
 
-    if (EFI_ERROR(Status)) {
-        Print(
-            L"[ERROR] Could not open selected kernel: %r\r\n",
-            Status
-        );
-
-        return Status;
-    }
-
-    Print(L"[OK] Selected kernel file found!\r\n");
-
-    uefi_call_wrapper(
-        KernelFile->Close,
-        1,
-        KernelFile
+    return load_kernel_and_exit(
+        ImageHandle,
+        SystemTable,
+        Config.Entries[Selected].Kernel
     );
-
-    Print(L"[BOOT] Kernel loading is not implemented yet.\r\n");
-
-    return EFI_SUCCESS;
 }
