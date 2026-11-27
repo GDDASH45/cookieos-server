@@ -146,7 +146,16 @@ void framebuffer_init(const COOKIEOS_BOOT_INFO *info)
     fb_format = info->framebuffer_pixel_format;
     cursor_x = 8;
     cursor_y = 8;
-    fill_rect(0, 0, fb_width, fb_height, background);
+    framebuffer_clear();
+}
+
+void framebuffer_clear(void)
+{
+    if (!fb)
+        return;
+    fill_rect(0, 0, fb_width, fb_height, 0x00000000U);
+    cursor_x = 8;
+    cursor_y = 8;
 }
 
 int framebuffer_available(void)
