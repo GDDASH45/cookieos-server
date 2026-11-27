@@ -11,6 +11,10 @@ _start:
     cli
     cld
 
+    movw $0xE9, %dx
+    movb $'E', %al
+    outb %al, %dx
+
     /* CookieBoot passes COOKIEOS_BOOT_INFO in RDI. */
     leaq kernel_stack_top(%rip), %rsp
     andq $-16, %rsp

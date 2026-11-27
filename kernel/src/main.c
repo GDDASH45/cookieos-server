@@ -83,6 +83,15 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
     if (info->size < sizeof(COOKIEOS_BOOT_INFO))
         kernel_halt();
 
+    __asm__ __volatile__(
+        "movw $0xE9, %%dx\n"
+        "movb $'M', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "rax", "rdx"
+    );
+
     framebuffer_init(info);
     if (!framebuffer_available())
         kernel_halt();
