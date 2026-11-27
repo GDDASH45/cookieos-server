@@ -15,7 +15,7 @@ PHDRS
 
 SECTIONS
 {
-    . = 0x00100000;
+    . = 0x01000000;
     __recovery_start = .;
 
     .text ALIGN(0x1000) :
