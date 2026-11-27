@@ -9,7 +9,7 @@ CFLAGS := -std=c11 -O2 -Wall -Wextra -Werror \
           -fno-pic -fno-pie -fno-asynchronous-unwind-tables \
           -fno-unwind-tables -m64 -mno-red-zone -mno-mmx \
           -mno-sse -mno-sse2 -mcmodel=small \
-          -Iinclude -I../boot/include
+          -Iinclude -I../boot/include -I../drivers/include
 
 ASFLAGS := -m64
 LDFLAGS := -nostdlib -static -z max-page-size=0x1000 \
