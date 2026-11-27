@@ -227,11 +227,15 @@ static EFI_STATUS load_elf_segments(
         if (page_end > highest)
             highest = page_end;
 
-        if (Header->entry >= load_address &&
-            Header->entry < segment_end &&
+        /*
+         * ELF e_entry is a virtual address. Translate it through the
+         * matching PT_LOAD segment to the physical address we loaded.
+         */
+        if (Header->entry >= ph->vaddr &&
+            Header->entry - ph->vaddr < ph->memsz &&
             Segments[count].executable) {
             *PhysicalEntry = load_address +
-                             (Header->entry - load_address);
+                             (Header->entry - ph->vaddr);
             entry_found = TRUE;
         }
 
