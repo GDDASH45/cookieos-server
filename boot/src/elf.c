@@ -293,6 +293,125 @@ static VOID collect_framebuffer(COOKIEOS_BOOT_INFO *Info)
     Info->framebuffer_pixel_format = Mode->PixelFormat;
 }
 
+#define DRIVER_DIRECTORY L"\\cookieos\\System\\Drivers"
+#define DRIVER_INFO_BUFFER 2048
+
+static BOOLEAN has_sys_extension(const CHAR16 *Name)
+{
+    UINTN Length = StrLen(Name);
+    if (Length < 4)
+        return FALSE;
+    Name += Length - 4;
+    return (Name[0] == L'.' &&
+            (Name[1] == L's' || Name[1] == L'S') &&
+            (Name[2] == L'y' || Name[2] == L'Y') &&
+            (Name[3] == L's' || Name[3] == L'S'));
+}
+
+static EFI_STATUS load_driver_images(
+    EFI_FILE_HANDLE Root,
+    COOKIEOS_BOOT_INFO *Info
+)
+{
+    EFI_STATUS Status;
+    EFI_FILE_HANDLE Directory = NULL;
+    EFI_FILE_INFO *Entry = NULL;
+    UINTN EntrySize = DRIVER_INFO_BUFFER;
+
+    Status = uefi_call_wrapper(Root->Open, 5, Root, &Directory,
+                               DRIVER_DIRECTORY, EFI_FILE_MODE_READ, 0);
+    if (EFI_ERROR(Status)) {
+        Print(L"[DRIVER] No driver directory; continuing without drivers.\r\n");
+        return EFI_SUCCESS;
+    }
+
+    Status = uefi_call_wrapper(BS->AllocatePool, 3, EfiLoaderData,
+                               EntrySize, (VOID **)&Entry);
+    if (EFI_ERROR(Status)) {
+        uefi_call_wrapper(Directory->Close, 1, Directory);
+        return Status;
+    }
+
+    for (;;) {
+        UINTN ReadSize = EntrySize;
+        EFI_FILE_HANDLE File = NULL;
+        VOID *Data = NULL;
+        UINTN DataSize = 0;
+
+        SetMem(Entry, EntrySize, 0);
+        Status = uefi_call_wrapper(Directory->Read, 3,
+                                   Directory, &ReadSize, Entry);
+        if (EFI_ERROR(Status) || ReadSize == 0)
+            break;
+
+        if ((Entry->Attribute & EFI_FILE_DIRECTORY) != 0 ||
+            !has_sys_extension(Entry->FileName))
+            continue;
+
+        if (Info->driver_count >= COOKIEOS_BOOT_MAX_DRIVERS) {
+            Print(L"[DRIVER] Driver limit reached; ignoring remaining files.\r\n");
+            break;
+        }
+
+        Status = uefi_call_wrapper(Directory->Open, 5,
+                                   Directory, &File, Entry->FileName,
+                                   EFI_FILE_MODE_READ, 0);
+        if (EFI_ERROR(Status))
+            continue;
+
+        {
+            EFI_FILE_INFO *FileInfo = NULL;
+            EFI_GUID FileInfoGuid = EFI_FILE_INFO_ID;
+            UINTN FileInfoSize = SIZE_OF_EFI_FILE_INFO + 256;
+            UINTN ActualSize;
+
+            Status = uefi_call_wrapper(BS->AllocatePool, 3, EfiLoaderData,
+                                       FileInfoSize, (VOID **)&FileInfo);
+            if (!EFI_ERROR(Status)) {
+                Status = uefi_call_wrapper(File->GetInfo, 4, File,
+                                           &FileInfoGuid, &FileInfoSize,
+                                           FileInfo);
+            }
+            if (EFI_ERROR(Status) || FileInfo == NULL ||
+                FileInfo->FileSize == 0 ||
+                FileInfo->FileSize > 0xFFFFFFFFULL) {
+                if (FileInfo != NULL)
+                    uefi_call_wrapper(BS->FreePool, 1, FileInfo);
+                uefi_call_wrapper(File->Close, 1, File);
+                continue;
+            }
+
+            DataSize = (UINTN)FileInfo->FileSize;
+            uefi_call_wrapper(BS->FreePool, 1, FileInfo);
+            Status = uefi_call_wrapper(BS->AllocatePool, 3, EfiLoaderData,
+                                       DataSize, &Data);
+            if (EFI_ERROR(Status)) {
+                uefi_call_wrapper(File->Close, 1, File);
+                continue;
+            }
+
+            ActualSize = DataSize;
+            Status = uefi_call_wrapper(File->Read, 3, File,
+                                       &ActualSize, Data);
+            uefi_call_wrapper(File->Close, 1, File);
+            if (EFI_ERROR(Status) || ActualSize != DataSize) {
+                uefi_call_wrapper(BS->FreePool, 1, Data);
+                continue;
+            }
+        }
+
+        Info->drivers[Info->driver_count].image = (UINT64)(UINTN)Data;
+        Info->drivers[Info->driver_count].image_size = DataSize;
+        ++Info->driver_count;
+        Print(L"[DRIVER] Preloaded %s (%u bytes).\r\n",
+              Entry->FileName, DataSize);
+    }
+
+    uefi_call_wrapper(BS->FreePool, 1, Entry);
+    uefi_call_wrapper(Directory->Close, 1, Directory);
+    return EFI_SUCCESS;
+}
+
 static EFI_STATUS exit_boot_services_and_jump(
     EFI_HANDLE ImageHandle,
     COOKIEOS_BOOT_INFO *Info,
@@ -408,9 +527,10 @@ EFI_STATUS load_kernel_and_exit(
         return Status;
 
     Status = read_entire_file(Root, Path, &Image, &ImageSize);
-    uefi_call_wrapper(Root->Close, 1, Root);
-    if (EFI_ERROR(Status))
+    if (EFI_ERROR(Status)) {
+        uefi_call_wrapper(Root->Close, 1, Root);
         return Status;
+    }
 
     if (ImageSize < sizeof(ELF64_EHDR)) {
         Status = EFI_LOAD_ERROR;
@@ -463,11 +583,19 @@ EFI_STATUS load_kernel_and_exit(
     Info->kernel_entry = PhysicalEntry;
     collect_framebuffer(Info);
 
+    Status = load_driver_images(Root, Info);
+    uefi_call_wrapper(Root->Close, 1, Root);
+    Root = NULL;
+    if (EFI_ERROR(Status))
+        goto fail;
+
     Print(L"[ELF] Exiting UEFI boot services...\r\n");
 
     Status = exit_boot_services_and_jump(ImageHandle, Info, PhysicalEntry);
 
 fail:
+    if (Root != NULL)
+        uefi_call_wrapper(Root->Close, 1, Root);
     if (Image != NULL)
         uefi_call_wrapper(BS->FreePool, 1, Image);
 
