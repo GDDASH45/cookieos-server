@@ -3,7 +3,7 @@
  * BOOTX64.EFI - UEFI fallback chainloader
  *
  * Loads:
- *   \\cookieos\\System\\Boot\\CookieBoot.efi
+ *   \cookieos\System\Boot\CookieBoot.efi
  *
  * SPDX-License-Identifier: GPL-2.0-only
  */
@@ -11,7 +11,7 @@
 #include <efi.h>
 #include <efilib.h>
 
-#define COOKIEBOOT_PATH L"\\\\cookieos\\\\System\\\\Boot\\\\CookieBoot.efi"
+#define COOKIEBOOT_PATH L"\\cookieos\\System\\Boot\\CookieBoot.efi"
 
 EFI_STATUS
 efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
@@ -23,8 +23,8 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 
     InitializeLib(ImageHandle, SystemTable);
 
-    Print(L"CookieOS Server 2026\\r\\n");
-    Print(L"BOOTX64.EFI: Starting CookieOS chainloader...\\r\\n");
+    Print(L"CookieOS Server 2026\r\n");
+    Print(L"BOOTX64.EFI: Starting CookieOS chainloader...\r\n");
 
     /*
      * Get information about the currently running image.
@@ -38,7 +38,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     );
 
     if (EFI_ERROR(Status)) {
-        Print(L"BOOTX64: Cannot get loaded image protocol: %r\\r\\n", Status);
+        Print(L"BOOTX64: Cannot get loaded image protocol: %r\r\n", Status);
         return Status;
     }
 
@@ -52,11 +52,11 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     );
 
     if (DevicePath == NULL) {
-        Print(L"BOOTX64: Cannot construct CookieBoot device path.\\r\\n");
+        Print(L"BOOTX64: Cannot construct CookieBoot device path.\r\n");
         return EFI_OUT_OF_RESOURCES;
     }
 
-    Print(L"BOOTX64: Loading %s\\r\\n", COOKIEBOOT_PATH);
+    Print(L"BOOTX64: Loading %s\r\n", COOKIEBOOT_PATH);
 
     /*
      * Ask UEFI to load CookieBoot. This validates and loads
@@ -77,12 +77,12 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     DevicePath = NULL;
 
     if (EFI_ERROR(Status)) {
-        Print(L"BOOTX64: LoadImage failed: %r\\r\\n", Status);
+        Print(L"BOOTX64: LoadImage failed: %r\r\n", Status);
         return Status;
     }
 
-    Print(L"BOOTX64: CookieBoot loaded successfully.\\r\\n");
-    Print(L"BOOTX64: Starting CookieBoot...\\r\\n");
+    Print(L"BOOTX64: CookieBoot loaded successfully.\r\n");
+    Print(L"BOOTX64: Starting CookieBoot...\r\n");
 
     /*
      * Execute CookieBoot.
@@ -99,7 +99,7 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
      * StartImage only returns if CookieBoot exits or fails.
      * Clean up the child image in that case.
      */
-    Print(L"BOOTX64: CookieBoot returned: %r\\r\\n", Status);
+    Print(L"BOOTX64: CookieBoot returned: %r\r\n", Status);
 
     uefi_call_wrapper(
         BS->UnloadImage,
