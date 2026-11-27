@@ -195,6 +195,12 @@ int ata_read_sector(uint32_t lba,void *buffer)
     *(volatile uint32_t *)(table+0x84)=0;
     *(volatile uint32_t *)(table+0x8C)=511U|(1U<<31);
 
+    {
+        uint32_t timeout=10000000U;
+        while(timeout-- && (mmio_read(port,PORT_TFD)&0x88U)) { }
+        if(!timeout)return 0;
+    }
+    __asm__ volatile("" ::: "memory");
     mmio_write(port,PORT_IS,0xFFFFFFFFU);
     ci=mmio_read(port,PORT_CI);
     mmio_write(port,PORT_CI,ci|1U);
@@ -207,6 +213,7 @@ int ata_read_sector(uint32_t lba,void *buffer)
         if(!timeout)return 0;
     }
     if(mmio_read(port,PORT_TFD)&0x01U)return 0;
+    __asm__ volatile("" ::: "memory");
     for(i=0;i<512;i++)((uint8_t*)buffer)[i]=dma_buffer[i];
     return 1;
 }
