@@ -19,6 +19,7 @@ static __attribute__((noreturn)) void kernel_halt(void)
 
 static __attribute__((noreturn)) void kernel_panic(const char *message)
 {
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)0x50));
     framebuffer_write("\n[KERNEL PANIC] ");
     framebuffer_write(message);
     framebuffer_write("\n");
@@ -83,15 +84,19 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
 
     if (!info)
         kernel_panic("CookieBoot supplied a NULL boot-information pointer");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)0x4E));
 
     if (info->magic != COOKIEOS_BOOTINFO_MAGIC)
         kernel_panic("Invalid boot-information magic");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)0x47));
 
     if (info->version != COOKIEOS_BOOTINFO_VERSION)
         kernel_panic("Unsupported boot-information ABI version");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)0x56));
 
     if (info->size < sizeof(COOKIEOS_BOOT_INFO))
-        kernel_halt();
+        kernel_panic("Boot-information structure is too small");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)0x5A));
 
     __asm__ __volatile__(
         "movw $0xE9, %%dx\n"
