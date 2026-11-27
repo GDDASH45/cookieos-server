@@ -163,16 +163,21 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
     __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'T'));
     if (!fat_init(info->kernel_physical_base, info->kernel_size))
         kernel_panic("Could not initialize AHCI disk or FAT16/32 volume");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'M'));
 
     framebuffer_write("[FAT] Reading \\cookieos\\System\\autoexec.app...\n");
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'N'));
     {
         size_t app_size = 0;
-        if (!fat_read_file("cookieos/system/autoexec.app",
-                           autoexec_image, sizeof(autoexec_image),
-                           &app_size))
+        __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'O'));
+        int read_ok = fat_read_file("cookieos/system/autoexec.app",
+                                    autoexec_image, sizeof(autoexec_image),
+                                    &app_size);
+        __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'Q'));
+        if (!read_ok)
             kernel_panic("Could not read \\cookieos\\System\\autoexec.app");
 
-        framebuffer_write("[FAT] Loaded autoexec.app (");
+        framebuffer_write("[FAT] Loaded autoexec.app (        framebuffer_write("[FAT] Loaded autoexec.app (");
         framebuffer_write_dec(app_size);
         framebuffer_write(" bytes)\n");
         usermode_run_app(autoexec_image, app_size);
