@@ -359,11 +359,10 @@ static EFI_STATUS exit_boot_services_and_jump(
      * firmware page tables still active and must establish its own mappings.
      */
     __asm__ __volatile__(
-        "movq %0, %%rdi\n"
-        "jmp *%1\n"
+        "jmp *%%rax"
         :
-        : "r"((UINT64)(UINTN)Info), "r"(Entry)
-        : "rdi", "memory"
+        : "D"(Info), "a"(Entry)
+        : "memory"
     );
 
     __builtin_unreachable();
