@@ -165,6 +165,7 @@ static EFI_STATUS load_elf_segments(
         UINT64 page_end;
         UINT64 pages;
         UINT64 segment_end;
+        UINT64 virtual_end;
         EFI_STATUS Status;
         UINTN j;
 
@@ -177,7 +178,8 @@ static EFI_STATUS load_elf_segments(
 
         load_address = ph->paddr ? ph->paddr : ph->vaddr;
 
-        if (add_overflow_u64(load_address, ph->memsz, &segment_end))
+        if (add_overflow_u64(load_address, ph->memsz, &segment_end) ||
+            add_overflow_u64(ph->vaddr, ph->memsz, &virtual_end))
             return EFI_LOAD_ERROR;
 
         if (load_address == 0 || segment_end <= load_address)
@@ -232,7 +234,7 @@ static EFI_STATUS load_elf_segments(
          * matching PT_LOAD segment to the physical address we loaded.
          */
         if (Header->entry >= ph->vaddr &&
-            Header->entry - ph->vaddr < ph->memsz &&
+            Header->entry < virtual_end &&
             Segments[count].executable) {
             *PhysicalEntry = load_address +
                              (Header->entry - ph->vaddr);
