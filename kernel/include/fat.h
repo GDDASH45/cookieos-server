@@ -4,6 +4,7 @@
 #ifndef COOKIEOS_FAT_H
 #define COOKIEOS_FAT_H
 #include <stddef.h>
+#include <stdint.h>
 int fat_init(uint64_t kernel_physical_base, uint64_t kernel_size);
 int fat_read_file(const char *path, void *buffer, size_t capacity, size_t *size);
 #endif
