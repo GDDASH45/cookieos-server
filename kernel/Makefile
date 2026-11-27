@@ -12,7 +12,9 @@ CFLAGS := -std=c11 -O2 -Wall -Wextra -Werror \
           -Iinclude -I../boot/include -I../drivers/include
 
 ASFLAGS := -m64
+
 LDFLAGS := -nostdlib -static -z max-page-size=0x1000 \
+           --no-dynamic-linker \
            -T linker.ld -Map=mtoskrnl.map
 
 C_SOURCES := $(shell find src -type f -name '*.c' -print)
@@ -44,6 +46,7 @@ recovery/main.o: recovery/main.c include/framebuffer.h ../boot/include/bootinfo.
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 RECOVERY_LDFLAGS := -nostdlib -static -z max-page-size=0x1000 \
+                    --no-dynamic-linker \
                     -T recovery/linker.ld -Map=recovery.map
 
 recovery.ckx: recovery/entry.o recovery/main.o src/framebuffer.o recovery/linker.ld
