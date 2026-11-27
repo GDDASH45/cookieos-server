@@ -6,6 +6,7 @@
 #include "../../boot/include/bootinfo.h"
 #include "framebuffer.h"
 #include "driver_loader.h"
+#include "usermode.h"
 #include <stdint.h>
 
 static __attribute__((noreturn)) void kernel_halt(void)
@@ -137,7 +138,8 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
         framebuffer_write("[DRIVER] Skipping preload: CookieBoot uses ABI v1.\\n");
 
     framebuffer_write("[MT] Early initialization complete.\n");
-    framebuffer_write("[MT] CPU is halted until the next kernel subsystem is added.\n");
+    framebuffer_write("[MT] Starting Ring 3 application test...\n");
+    usermode_run_demo();
 
-    kernel_halt();
+    kernel_panic("Ring 3 application unexpectedly returned");
 }
