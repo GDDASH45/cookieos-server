@@ -254,6 +254,55 @@ static EFI_STATUS load_elf_segments(
     return EFI_SUCCESS;
 }
 
+/*
+ * Build temporary identity mappings for the initial kernel handoff.
+ * One PML4, one PDPT, and 512 page directories map the lower 512 GiB
+ * with 2 MiB pages. The kernel currently uses physical == virtual addresses.
+ */
+#define IDENTITY_PDPT_ENTRIES 512
+#define IDENTITY_PAGE_TABLE_PAGES (2 + IDENTITY_PDPT_ENTRIES)
+
+static EFI_STATUS create_identity_page_tables(
+    EFI_PHYSICAL_ADDRESS *PageTableBase
+)
+{
+    EFI_STATUS Status;
+    EFI_PHYSICAL_ADDRESS Base = 0;
+    UINT64 *Pml4;
+    UINT64 *Pdpt;
+    UINTN i;
+    UINTN j;
+
+    Status = uefi_call_wrapper(BS->AllocatePages, 4,
+                               AllocateAnyPages, EfiLoaderData,
+                               IDENTITY_PAGE_TABLE_PAGES, &Base);
+    if (EFI_ERROR(Status))
+        return Status;
+
+    SetMem((VOID *)(UINTN)Base,
+           IDENTITY_PAGE_TABLE_PAGES * PAGE_BYTES, 0);
+
+    Pml4 = (UINT64 *)(UINTN)Base;
+    Pdpt = (UINT64 *)(UINTN)(Base + PAGE_BYTES);
+    Pml4[0] = (Base + 2 * PAGE_BYTES) | 0x003ULL;
+
+    for (i = 0; i < IDENTITY_PDPT_ENTRIES; ++i) {
+        UINT64 *Pd = (UINT64 *)(UINTN)
+            (Base + (2 + i) * PAGE_BYTES);
+
+        Pdpt[i] = (UINT64)(UINTN)Pd | 0x003ULL;
+
+        for (j = 0; j < 512; ++j) {
+            UINT64 Physical = ((UINT64)i * 512ULL + j) *
+                              0x200000ULL;
+            Pd[j] = Physical | 0x083ULL;
+        }
+    }
+
+    *PageTableBase = Base;
+    return EFI_SUCCESS;
+}
+
 static UINT64 find_acpi_rsdp(EFI_SYSTEM_TABLE *SystemTable)
 {
     UINTN i;
@@ -415,7 +464,8 @@ static EFI_STATUS load_driver_images(
 static EFI_STATUS exit_boot_services_and_jump(
     EFI_HANDLE ImageHandle,
     COOKIEOS_BOOT_INFO *Info,
-    UINT64 Entry
+    UINT64 Entry,
+    EFI_PHYSICAL_ADDRESS PageTableBase
 )
 {
     EFI_STATUS Status;
@@ -477,10 +527,15 @@ static EFI_STATUS exit_boot_services_and_jump(
      * This jump uses the physical entry address; the kernel starts with
      * firmware page tables still active and must establish its own mappings.
      */
+    /*
+     * Replace the firmware page tables with our temporary identity map.
+     * RDI remains the boot-info argument and RAX remains the kernel entry.
+     */
     __asm__ __volatile__(
+        "movq %%rcx, %%cr3\\n\\t"
         "jmp *%%rax"
         :
-        : "D"(Info), "a"(Entry)
+        : "D"(Info), "a"(Entry), "c"(PageTableBase)
         : "memory"
     );
 
@@ -504,6 +559,7 @@ EFI_STATUS load_kernel_and_exit(
     UINT64 KernelEnd = 0;
     UINT64 PhysicalEntry = 0;
     COOKIEOS_BOOT_INFO *Info = NULL;
+    EFI_PHYSICAL_ADDRESS PageTableBase = 0;
 
     EFI_LOADED_IMAGE *LoadedImage = NULL;
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSystem = NULL;
@@ -589,9 +645,18 @@ EFI_STATUS load_kernel_and_exit(
     if (EFI_ERROR(Status))
         goto fail;
 
-    Print(L"[ELF] Exiting UEFI boot services...\r\n");
+    Status = create_identity_page_tables(&PageTableBase);
+    if (EFI_ERROR(Status)) {
+        Print(L"[ELF] Could not create identity page tables: %r\\r\\n",
+              Status);
+        goto fail;
+    }
 
-    Status = exit_boot_services_and_jump(ImageHandle, Info, PhysicalEntry);
+    Print(L"[ELF] Exiting UEFI boot services...\\r\\n");
+
+    Status = exit_boot_services_and_jump(
+        ImageHandle, Info, PhysicalEntry, PageTableBase
+    );
 
 fail:
     if (Root != NULL)
