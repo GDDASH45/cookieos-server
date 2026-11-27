@@ -7,7 +7,10 @@
 #include "framebuffer.h"
 #include "driver_loader.h"
 #include "usermode.h"
+#include "fat.h"
 #include <stdint.h>
+
+static uint8_t autoexec_image[2U * 1024U * 1024U] __attribute__((aligned(16)));
 
 static __attribute__((noreturn)) void kernel_halt(void)
 {
