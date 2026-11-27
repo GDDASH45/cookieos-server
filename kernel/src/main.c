@@ -122,13 +122,6 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
         kernel_halt();
 
     framebuffer_clear();
-    if (info->version >= 3U && info->splash_image &&
-        info->splash_image_size) {
-        if (!framebuffer_draw_bmp(
-                (const void *)(uintptr_t)info->splash_image,
-                (size_t)info->splash_image_size))
-            framebuffer_write("[SPLASH] Invalid splash.bmp; using text console.\n");
-    }
     framebuffer_write("\n========================================\n");
     framebuffer_write(" CookieOS Server 2026\n");
     framebuffer_write(" Modular Technology kernel\n");
