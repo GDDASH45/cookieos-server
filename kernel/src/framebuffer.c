@@ -188,8 +188,7 @@ int framebuffer_draw_bmp(const void *data, size_t size)
     bpp = read_le16(bmp + 28);
     compression = read_le32(bmp + 30);
 
-    if (width != 128 || height == 0 || height == (-128 - 1) ||
-        (height != 128 && height != -128) || planes != 1U ||
+    if (width != 128 || height == 0 || (height != 128 && height != -128) || planes != 1U ||
         (bpp != 24U && bpp != 32U) || compression != 0U)
         return 0;
 
