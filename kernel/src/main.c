@@ -5,6 +5,7 @@
 
 #include <bootinfo.h>
 #include "framebuffer.h"
+#include "driver_loader.h"
 
 static __attribute__((noreturn)) void kernel_halt(void)
 {
@@ -86,6 +87,7 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
     if (!framebuffer_available())
         kernel_halt();
 
+    framebuffer_clear();
     framebuffer_write("\n========================================\n");
     framebuffer_write(" CookieOS Server 2026\n");
     framebuffer_write(" Modular Technology kernel\n");
@@ -95,6 +97,8 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
 
     framebuffer_write("\n[MT] Kernel entry reached successfully.\n");
     framebuffer_write("[MT] GOP framebuffer console initialized.\n");
+    driver_load_all(info);
+
     framebuffer_write("[MT] Early initialization complete.\n");
     framebuffer_write("[MT] CPU is halted until the next kernel subsystem is added.\n");
 
