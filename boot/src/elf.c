@@ -655,10 +655,10 @@ EFI_STATUS load_kernel_and_exit(
         if (!EFI_ERROR(Status)) {
             Info->splash_image = (UINT64)(UINTN)Splash;
             Info->splash_image_size = SplashSize;
-            Print(L"[SPLASH] Preloaded splash.bmp (%u bytes).\\r\\n",
+            Print(L"[SPLASH] Preloaded splash.bmp (%u bytes).\r\n",
                   SplashSize);
         } else {
-            Print(L"[SPLASH] splash.bmp unavailable; continuing without it.\\r\\n");
+            Print(L"[SPLASH] splash.bmp unavailable; continuing without it.\r\n");
         }
     }
 
