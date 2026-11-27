@@ -131,27 +131,20 @@ static EFI_STATUS read_entire_file(
 }
 
 static EFI_STATUS load_elf_segments(
-    const UINT8 *Image,
-    UINTN ImageSize,
-    const ELF64_EHDR *Header,
-    LOADED_SEGMENT *Segments,
-    UINTN *SegmentCount,
-    UINT64 *KernelBase,
-    UINT64 *KernelEnd,
-    UINT64 *PhysicalEntry
+    const UINT8 *Image, UINTN ImageSize, const ELF64_EHDR *Header,
+    LOADED_SEGMENT *Segments, UINTN *SegmentCount,
+    UINT64 *KernelBase, UINT64 *KernelEnd, UINT64 *EntryPoint
 )
 {
-    UINTN i;
-    UINTN count = 0;
-    UINT64 lowest = ~0ULL;
-    UINT64 highest = 0;
+    UINTN i, count = 0;
+    UINT64 lowest = ~0ULL, highest = 0;
     BOOLEAN entry_found = FALSE;
+    EFI_PHYSICAL_ADDRESS AllocationBase = 0;
+    UINT64 allocation_size, allocation_pages;
 
     if (Header->phentsize != sizeof(ELF64_PHDR) ||
-        Header->phnum == 0 || Header->phnum > 128)
-        return EFI_LOAD_ERROR;
-
-    if (!range_valid(Header->phoff,
+        Header->phnum == 0 || Header->phnum > 128 ||
+        !range_valid(Header->phoff,
                      (UINT64)Header->phnum * Header->phentsize,
                      ImageSize))
         return EFI_LOAD_ERROR;
@@ -160,97 +153,114 @@ static EFI_STATUS load_elf_segments(
         const ELF64_PHDR *ph =
             (const ELF64_PHDR *)(Image + Header->phoff +
                                  (UINT64)i * Header->phentsize);
-        EFI_PHYSICAL_ADDRESS address;
-        UINT64 load_address;
-        UINT64 page_start;
-        UINT64 page_end;
-        UINT64 pages;
-        UINT64 segment_end;
-        UINT64 virtual_end;
-        EFI_STATUS Status;
+        UINT64 segment_end, page_start, page_end;
         UINTN j;
 
         if (ph->type != PT_LOAD || ph->memsz == 0)
             continue;
-
         if (ph->filesz > ph->memsz ||
             !range_valid(ph->offset, ph->filesz, ImageSize))
             return EFI_LOAD_ERROR;
-
-        load_address = ph->paddr ? ph->paddr : ph->vaddr;
-
-        if (add_overflow_u64(load_address, ph->memsz, &segment_end) ||
-            add_overflow_u64(ph->vaddr, ph->memsz, &virtual_end))
+        if (ph->paddr != 0 && ph->paddr != ph->vaddr)
+            return EFI_UNSUPPORTED;
+        if (add_overflow_u64(ph->vaddr, ph->memsz, &segment_end) ||
+            segment_end <= ph->vaddr ||
+            segment_end > 0x8000000000ULL ||
+            segment_end > (~0ULL - (PAGE_BYTES - 1)))
             return EFI_LOAD_ERROR;
 
-        if (load_address == 0 || segment_end <= load_address)
-            return EFI_LOAD_ERROR;
-
-        page_start = load_address & ~((UINT64)PAGE_BYTES - 1);
-        if (segment_end > (~0ULL - (PAGE_BYTES - 1)))
-            return EFI_LOAD_ERROR;
+        page_start = ph->vaddr & ~((UINT64)PAGE_BYTES - 1);
         page_end = (segment_end + PAGE_BYTES - 1) &
                    ~((UINT64)PAGE_BYTES - 1);
-        pages = (page_end - page_start) / PAGE_BYTES;
-
         if (count >= 128)
             return EFI_OUT_OF_RESOURCES;
 
-        /* Separate PT_LOAD segments must not claim the same pages. */
         for (j = 0; j < count; ++j) {
-            UINT64 old_start = Segments[j].physical;
+            UINT64 old_start =
+                Segments[j].start & ~((UINT64)PAGE_BYTES - 1);
             UINT64 old_end = old_start + Segments[j].pages * PAGE_BYTES;
             if (page_start < old_end && page_end > old_start)
                 return EFI_LOAD_ERROR;
         }
 
-        address = page_start;
-        Status = uefi_call_wrapper(BS->AllocatePages, 4,
-                                   AllocateAddress, EfiLoaderData,
-                                   pages, &address);
-        if (EFI_ERROR(Status)) {
-            Print(L"[ELF] AllocatePages failed at %lx: %r\r\n",
-                  page_start, Status);
-            return Status;
-        }
-
-        SetMem((VOID *)(UINTN)page_start, (UINTN)(pages * PAGE_BYTES), 0);
-        CopyMem((VOID *)(UINTN)load_address,
-                (CONST VOID *)(Image + ph->offset),
-                (UINTN)ph->filesz);
-
-        Segments[count].start = load_address;
+        Segments[count].start = ph->vaddr;
         Segments[count].end = segment_end;
-        Segments[count].physical = page_start;
-        Segments[count].pages = pages;
+        Segments[count].physical = 0;
+        Segments[count].pages = (page_end - page_start) / PAGE_BYTES;
         Segments[count].executable = (ph->flags & PF_X) != 0;
 
-        if (page_start < lowest)
-            lowest = page_start;
-        if (page_end > highest)
-            highest = page_end;
-
-        /*
-         * ELF e_entry is a virtual address. Translate it through the
-         * matching PT_LOAD segment to the physical address we loaded.
-         */
+        if (page_start < lowest) lowest = page_start;
+        if (page_end > highest) highest = page_end;
         if (Header->entry >= ph->vaddr &&
-            Header->entry < virtual_end &&
-            Segments[count].executable) {
-            *PhysicalEntry = load_address +
-                             (Header->entry - ph->vaddr);
+            Header->entry < segment_end &&
+            Segments[count].executable)
             entry_found = TRUE;
-        }
-
         ++count;
     }
 
-    if (count == 0 || !entry_found)
+    if (count == 0 || !entry_found || highest <= lowest)
         return EFI_LOAD_ERROR;
 
+    allocation_size = highest - lowest;
+    allocation_pages = allocation_size / PAGE_BYTES;
+    if (allocation_pages == 0 ||
+        allocation_pages > (~(UINTN)0) / PAGE_BYTES)
+        return EFI_OUT_OF_RESOURCES;
+
+    /*
+     * Allocate physical memory wherever UEFI has free pages. The kernel
+     * remains linked at its original virtual address and is mapped there
+     * before the entry point is called.
+     */
+    {
+        EFI_STATUS Status = uefi_call_wrapper(
+            BS->AllocatePages, 4, AllocateAnyPages, EfiLoaderData,
+            (UINTN)allocation_pages, &AllocationBase
+        );
+        if (EFI_ERROR(Status)) {
+            Print(L"[ELF] Could not allocate %lu kernel pages: %r\r\n",
+                  allocation_pages, Status);
+            return Status;
+        }
+    }
+
+    if (AllocationBase >= 0x8000000000ULL ||
+        allocation_size > 0x8000000000ULL - AllocationBase) {
+        uefi_call_wrapper(BS->FreePages, 2,
+                          AllocationBase, (UINTN)allocation_pages);
+        return EFI_UNSUPPORTED;
+    }
+
+    SetMem((VOID *)(UINTN)AllocationBase,
+           (UINTN)allocation_size, 0);
+
+    count = 0;
+    for (i = 0; i < Header->phnum; ++i) {
+        const ELF64_PHDR *ph =
+            (const ELF64_PHDR *)(Image + Header->phoff +
+                                 (UINT64)i * Header->phentsize);
+        UINT64 page_start, destination;
+
+        if (ph->type != PT_LOAD || ph->memsz == 0)
+            continue;
+        page_start = ph->vaddr & ~((UINT64)PAGE_BYTES - 1);
+        destination = AllocationBase + (ph->vaddr - lowest);
+        if (ph->filesz != 0)
+            CopyMem((VOID *)(UINTN)destination,
+                    (CONST VOID *)(Image + ph->offset),
+                    (UINTN)ph->filesz);
+
+        Segments[count].physical = AllocationBase + (page_start - lowest);
+        ++count;
+    }
+
     *SegmentCount = count;
-    *KernelBase = lowest;
-    *KernelEnd = highest;
+    *KernelBase = AllocationBase;
+    *KernelEnd = AllocationBase + allocation_size;
+    *EntryPoint = Header->entry;
+    Print(L"[ELF] Kernel virtual range: %lx-%lx\r\n", lowest, highest);
+    Print(L"[ELF] Kernel physical allocation: %lx-%lx\r\n",
+          *KernelBase, *KernelEnd);
     return EFI_SUCCESS;
 }
 
@@ -262,16 +272,58 @@ static EFI_STATUS load_elf_segments(
 #define IDENTITY_PDPT_ENTRIES 512
 #define IDENTITY_PAGE_TABLE_PAGES (2 + IDENTITY_PDPT_ENTRIES)
 
+static EFI_STATUS map_kernel_page(
+    UINT64 *Pdpt, UINT64 VirtualAddress, UINT64 PhysicalAddress
+)
+{
+    UINTN PdptIndex = (UINTN)((VirtualAddress >> 30) & 0x1ff);
+    UINTN PdIndex = (UINTN)((VirtualAddress >> 21) & 0x1ff);
+    UINTN PtIndex = (UINTN)((VirtualAddress >> 12) & 0x1ff);
+    UINT64 *Pd, *Pt, Pde;
+    EFI_STATUS Status;
+
+    if (VirtualAddress >= 0x8000000000ULL ||
+        PhysicalAddress >= 0x8000000000ULL)
+        return EFI_UNSUPPORTED;
+
+    Pd = (UINT64 *)(UINTN)(Pdpt[PdptIndex] & ~0xfffULL);
+    Pde = Pd[PdIndex];
+    if ((Pde & 1ULL) == 0)
+        return EFI_LOAD_ERROR;
+
+    if ((Pde & 0x080ULL) != 0) {
+        EFI_PHYSICAL_ADDRESS PtBase = 0;
+        UINT64 BlockBase = VirtualAddress & ~0x1fffffULL;
+        UINTN i;
+
+        Status = uefi_call_wrapper(BS->AllocatePages, 4,
+                                   AllocateAnyPages, EfiLoaderData,
+                                   1, &PtBase);
+        if (EFI_ERROR(Status))
+            return Status;
+
+        Pt = (UINT64 *)(UINTN)PtBase;
+        for (i = 0; i < 512; ++i)
+            Pt[i] = (BlockBase + (UINT64)i * PAGE_BYTES) | 0x003ULL;
+        Pd[PdIndex] = PtBase | 0x003ULL;
+    } else {
+        Pt = (UINT64 *)(UINTN)(Pde & ~0xfffULL);
+    }
+
+    Pt[PtIndex] =
+        (PhysicalAddress & ~((UINT64)PAGE_BYTES - 1)) | 0x003ULL;
+    return EFI_SUCCESS;
+}
+
 static EFI_STATUS create_identity_page_tables(
+    const LOADED_SEGMENT *Segments, UINTN SegmentCount,
     EFI_PHYSICAL_ADDRESS *PageTableBase
 )
 {
     EFI_STATUS Status;
     EFI_PHYSICAL_ADDRESS Base = 0;
-    UINT64 *Pml4;
-    UINT64 *Pdpt;
-    UINTN i;
-    UINTN j;
+    UINT64 *Pml4, *Pdpt;
+    UINTN i, j;
 
     Status = uefi_call_wrapper(BS->AllocatePages, 4,
                                AllocateAnyPages, EfiLoaderData,
@@ -281,7 +333,6 @@ static EFI_STATUS create_identity_page_tables(
 
     SetMem((VOID *)(UINTN)Base,
            IDENTITY_PAGE_TABLE_PAGES * PAGE_BYTES, 0);
-
     Pml4 = (UINT64 *)(UINTN)Base;
     Pdpt = (UINT64 *)(UINTN)(Base + PAGE_BYTES);
     Pml4[0] = (Base + PAGE_BYTES) | 0x003ULL;
@@ -289,13 +340,26 @@ static EFI_STATUS create_identity_page_tables(
     for (i = 0; i < IDENTITY_PDPT_ENTRIES; ++i) {
         UINT64 *Pd = (UINT64 *)(UINTN)
             (Base + (2 + i) * PAGE_BYTES);
-
         Pdpt[i] = (UINT64)(UINTN)Pd | 0x003ULL;
-
         for (j = 0; j < 512; ++j) {
-            UINT64 Physical = ((UINT64)i * 512ULL + j) *
-                              0x200000ULL;
+            UINT64 Physical = ((UINT64)i * 512ULL + j) * 0x200000ULL;
             Pd[j] = Physical | 0x083ULL;
+        }
+    }
+
+    for (i = 0; i < SegmentCount; ++i) {
+        UINT64 VirtualPage =
+            Segments[i].start & ~((UINT64)PAGE_BYTES - 1);
+        for (j = 0; j < Segments[i].pages; ++j) {
+            Status = map_kernel_page(
+                Pdpt,
+                VirtualPage + (UINT64)j * PAGE_BYTES,
+                Segments[i].physical + (UINT64)j * PAGE_BYTES
+            );
+            if (EFI_ERROR(Status)) {
+                Print(L"[ELF] Kernel page mapping failed: %r\r\n", Status);
+                return Status;
+            }
         }
     }
 
@@ -640,8 +704,8 @@ static EFI_STATUS exit_boot_services_and_jump(
 
     /*
      * UEFI boot services are gone. Enter the kernel with BootInfo in RDI.
-     * This jump uses the physical entry address; the kernel starts with
-     * firmware page tables still active and must establish its own mappings.
+     * This jump uses the linked virtual entry address; the kernel starts with
+     * temporary page tables, which map kernel virtual addresses to its physical allocation.
      */
     /*
      * Replace the firmware page tables with our temporary identity map.
@@ -673,7 +737,7 @@ EFI_STATUS load_kernel_and_exit(
     UINTN SegmentCount = 0;
     UINT64 KernelBase = 0;
     UINT64 KernelEnd = 0;
-    UINT64 PhysicalEntry = 0;
+    UINT64 KernelEntry = 0;
     COOKIEOS_BOOT_INFO *Info = NULL;
     EFI_PHYSICAL_ADDRESS PageTableBase = 0;
 
@@ -731,14 +795,14 @@ EFI_STATUS load_kernel_and_exit(
 
     Status = load_elf_segments((const UINT8 *)Image, ImageSize,
                                Header, Segments, &SegmentCount,
-                               &KernelBase, &KernelEnd, &PhysicalEntry);
+                               &KernelBase, &KernelEnd, &KernelEntry);
     if (EFI_ERROR(Status)) {
         Print(L"[ELF] Segment loading failed: %r\r\n", Status);
         goto fail;
     }
 
     Print(L"[ELF] Loaded %u PT_LOAD segments.\r\n", SegmentCount);
-    Print(L"[ELF] Physical entry: %lx\r\n", PhysicalEntry);
+    Print(L"[ELF] Kernel entry: %lx\r\n", KernelEntry);
 
     Status = uefi_call_wrapper(BS->AllocatePool, 3, EfiLoaderData,
                                sizeof(*Info), (VOID **)&Info);
@@ -752,7 +816,7 @@ EFI_STATUS load_kernel_and_exit(
     Info->acpi_rsdp = find_acpi_rsdp(SystemTable);
     Info->kernel_physical_base = KernelBase;
     Info->kernel_size = KernelEnd - KernelBase;
-    Info->kernel_entry = PhysicalEntry;
+    Info->kernel_entry = KernelEntry;
     collect_framebuffer(Info);
 
     /*
@@ -785,7 +849,7 @@ EFI_STATUS load_kernel_and_exit(
     if (EFI_ERROR(Status))
         goto fail;
 
-    Status = create_identity_page_tables(&PageTableBase);
+    Status = create_identity_page_tables(Segments, SegmentCount, &PageTableBase);
     if (EFI_ERROR(Status)) {
         Print(L"[ELF] Could not create identity page tables: %r\r\n",
               Status);
@@ -795,7 +859,7 @@ EFI_STATUS load_kernel_and_exit(
     Print(L"[ELF] Exiting UEFI boot services...\r\n");
 
     Status = exit_boot_services_and_jump(
-        ImageHandle, Info, PhysicalEntry, PageTableBase
+        ImageHandle, Info, KernelEntry, PageTableBase
     );
 
 fail:
