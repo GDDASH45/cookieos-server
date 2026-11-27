@@ -284,7 +284,7 @@ static EFI_STATUS create_identity_page_tables(
 
     Pml4 = (UINT64 *)(UINTN)Base;
     Pdpt = (UINT64 *)(UINTN)(Base + PAGE_BYTES);
-    Pml4[0] = (Base + 2 * PAGE_BYTES) | 0x003ULL;
+    Pml4[0] = (Base + PAGE_BYTES) | 0x003ULL;
 
     for (i = 0; i < IDENTITY_PDPT_ENTRIES; ++i) {
         UINT64 *Pd = (UINT64 *)(UINTN)
@@ -340,6 +340,122 @@ static VOID collect_framebuffer(COOKIEOS_BOOT_INFO *Info)
     Info->framebuffer_height = Mode->VerticalResolution;
     Info->framebuffer_pixels_per_scanline = Mode->PixelsPerScanLine;
     Info->framebuffer_pixel_format = Mode->PixelFormat;
+}
+
+
+/*
+ * Display the optional 128x128 uncompressed BMP splash for three seconds.
+ * The image is sent directly to GOP, so this runs before ExitBootServices().
+ */
+static UINT16 bmp_read_u16(const UINT8 *p)
+{
+    return (UINT16)p[0] | ((UINT16)p[1] << 8);
+}
+
+static UINT32 bmp_read_u32(const UINT8 *p)
+{
+    return (UINT32)p[0] |
+           ((UINT32)p[1] << 8) |
+           ((UINT32)p[2] << 16) |
+           ((UINT32)p[3] << 24);
+}
+
+static BOOLEAN show_splash_for_three_seconds(
+    const VOID *Data,
+    UINTN Size
+)
+{
+    const UINT8 *Bytes = (const UINT8 *)Data;
+    UINT32 PixelOffset;
+    UINT32 DibSize;
+    INT32 Width;
+    INT32 Height;
+    UINT16 Planes;
+    UINT16 BitsPerPixel;
+    UINT32 Compression;
+    UINTN BytesPerPixel;
+    UINTN RowSize;
+    UINTN y;
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop = NULL;
+    EFI_GRAPHICS_OUTPUT_BLT_PIXEL *Pixels = NULL;
+    EFI_STATUS Status;
+    UINTN DestX;
+    UINTN DestY;
+
+    if (Data == NULL || Size < 54 ||
+        Bytes[0] != 'B' || Bytes[1] != 'M')
+        return FALSE;
+
+    PixelOffset = bmp_read_u32(Bytes + 10);
+    DibSize = bmp_read_u32(Bytes + 14);
+    Width = (INT32)bmp_read_u32(Bytes + 18);
+    Height = (INT32)bmp_read_u32(Bytes + 22);
+    Planes = bmp_read_u16(Bytes + 26);
+    BitsPerPixel = bmp_read_u16(Bytes + 28);
+    Compression = bmp_read_u32(Bytes + 30);
+
+    if (DibSize < 40 || (UINTN)14 + DibSize > Size ||
+        Width != 128 || (Height != 128 && Height != -128) ||
+        Planes != 1 || (BitsPerPixel != 24 && BitsPerPixel != 32) ||
+        Compression != 0)
+        return FALSE;
+
+    BytesPerPixel = BitsPerPixel / 8;
+    RowSize = ((128 * BytesPerPixel + 3) / 4) * 4;
+
+    if ((UINTN)PixelOffset > Size ||
+        RowSize * 128 > Size - (UINTN)PixelOffset)
+        return FALSE;
+
+    Status = uefi_call_wrapper(BS->LocateProtocol, 3,
+                               &GraphicsOutputProtocol, NULL,
+                               (VOID **)&Gop);
+    if (EFI_ERROR(Status) || Gop == NULL || Gop->Mode == NULL ||
+        Gop->Mode->Info == NULL)
+        return FALSE;
+
+    Status = uefi_call_wrapper(BS->AllocatePool, 3, EfiLoaderData,
+                               128 * 128 * sizeof(*Pixels),
+                               (VOID **)&Pixels);
+    if (EFI_ERROR(Status))
+        return FALSE;
+
+    for (y = 0; y < 128; ++y) {
+        UINTN SourceY = Height > 0 ? 127 - y : y;
+        const UINT8 *Row = Bytes + PixelOffset + SourceY * RowSize;
+        UINTN x;
+
+        for (x = 0; x < 128; ++x) {
+            const UINT8 *Source = Row + x * BytesPerPixel;
+            EFI_GRAPHICS_OUTPUT_BLT_PIXEL *Pixel =
+                &Pixels[y * 128 + x];
+
+            Pixel->Blue = Source[0];
+            Pixel->Green = Source[1];
+            Pixel->Red = Source[2];
+            Pixel->Reserved = 0;
+        }
+    }
+
+    DestX = Gop->Mode->Info->HorizontalResolution > 128
+        ? (Gop->Mode->Info->HorizontalResolution - 128) / 2 : 0;
+    DestY = Gop->Mode->Info->VerticalResolution > 128
+        ? (Gop->Mode->Info->VerticalResolution - 128) / 2 : 0;
+
+    Status = uefi_call_wrapper(Gop->Blt, 10,
+                               Gop, Pixels, EfiBltBufferToVideo,
+                               0, 0, DestX, DestY, 128, 128, 0);
+
+    uefi_call_wrapper(BS->FreePool, 1, Pixels);
+
+    if (EFI_ERROR(Status)) {
+        Print(L"[SPLASH] GOP drawing failed: %r\r\n", Status);
+        return FALSE;
+    }
+
+    Print(L"[SPLASH] Displaying splash.bmp for 3 seconds.\r\n");
+    uefi_call_wrapper(BS->Stall, 1, 3000000);
+    return TRUE;
 }
 
 #define DRIVER_DIRECTORY L"\\cookieos\\System\\Drivers"
@@ -657,6 +773,7 @@ EFI_STATUS load_kernel_and_exit(
             Info->splash_image_size = SplashSize;
             Print(L"[SPLASH] Preloaded splash.bmp (%u bytes).\r\n",
                   SplashSize);
+            show_splash_for_three_seconds(Splash, SplashSize);
         } else {
             Print(L"[SPLASH] splash.bmp unavailable; continuing without it.\r\n");
         }
