@@ -1,4 +1,4 @@
-/* CookieOS Server 2026 - ATA PIO block device
+/* CookieOS Server 2026 - AHCI SATA block device
  * SPDX-License-Identifier: GPL-2.0-only
  */
 #ifndef COOKIEOS_ATA_H
