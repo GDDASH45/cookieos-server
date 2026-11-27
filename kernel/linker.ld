@@ -11,6 +11,7 @@ PHDRS
 {
     text PT_LOAD FLAGS(5);
     data PT_LOAD FLAGS(6);
+    modules PT_LOAD FLAGS(7);
 }
 
 SECTIONS
@@ -44,6 +45,11 @@ SECTIONS
         *(.bss.*)
         __bss_end = .;
     } :data
+
+    .driver_pool ALIGN(0x1000) (NOLOAD) :
+    {
+        *(.driver_pool)
+    } :modules
 
     . = ALIGN(0x1000);
     __kernel_end = .;
