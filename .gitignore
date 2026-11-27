@@ -1,1 +1,4 @@
 /qemu
+*.o
+*.ckx
+*.map
