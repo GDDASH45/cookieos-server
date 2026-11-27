@@ -188,8 +188,22 @@ void syscall_dispatch(SYSCALL_FRAME *f)
 {
     if(f->rax==1){
         const char *s=(const char*)(uintptr_t)f->rdi;size_t n=(size_t)f->rsi;
-        if((uintptr_t)s<USER_BASE||n>4096U||
-           (uintptr_t)s>USER_LIMIT-n){framebuffer_write("[SYSCALL] Invalid user buffer\n");return;}
+        uintptr_t address=(uintptr_t)s;
+        if(address<USER_BASE||n>4096U||address>user_image_end||
+           n>user_image_end-address){
+            framebuffer_write("[SYSCALL] Invalid user buffer\\n");return;
+        }
+        if(n){
+            size_t first=(address-USER_BASE)/4096U;
+            size_t last=(address+n-1U-USER_BASE)/4096U;
+            if(last>=USER_PAGES){
+                framebuffer_write("[SYSCALL] User buffer outside app memory\\n");return;
+            }
+            for(size_t page=first;page<=last;page++)
+                if(!(user_page_table[page]&PAGE_PRESENT)){
+                    framebuffer_write("[SYSCALL] Unmapped user buffer\\n");return;
+                }
+        }
         for(size_t i=0;i<n;i++)framebuffer_putc(s[i]);
         f->rax=0;return;
     }
