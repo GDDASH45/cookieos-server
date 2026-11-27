@@ -1,4 +1,5 @@
 *.efi
 *.o
 *.so
-*elf
+*.elf
+*.EFI
