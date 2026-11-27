@@ -141,8 +141,23 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
         framebuffer_write("[DRIVER] Skipping preload: CookieBoot uses ABI v1.\\n");
 
     framebuffer_write("[MT] Early initialization complete.\n");
-    framebuffer_write("[MT] Starting Ring 3 application test...\n");
-    usermode_run_demo();
+    framebuffer_write("[STORAGE] Initializing primary ATA device...\n");
+    if (!fat_init())
+        kernel_panic("Could not initialize ATA disk or FAT16/32 volume");
 
-    kernel_panic("Ring 3 application unexpectedly returned");
+    framebuffer_write("[FAT] Reading \\cookieos\\System\\autoexec.app...\n");
+    {
+        size_t app_size = 0;
+        if (!fat_read_file("cookieos/system/autoexec.app",
+                           autoexec_image, sizeof(autoexec_image),
+                           &app_size))
+            kernel_panic("Could not read \\cookieos\\System\\autoexec.app");
+
+        framebuffer_write("[FAT] Loaded autoexec.app (");
+        framebuffer_write_dec(app_size);
+        framebuffer_write(" bytes)\n");
+        usermode_run_app(autoexec_image, app_size);
+    }
+
+    kernel_panic("External application unexpectedly returned");
 }
