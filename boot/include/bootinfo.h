@@ -6,7 +6,7 @@
 #define COOKIEOS_BOOTINFO_H
 
 #define COOKIEOS_BOOTINFO_MAGIC 0x434F4F4B49454249ULL
-#define COOKIEOS_BOOTINFO_VERSION 2U
+#define COOKIEOS_BOOTINFO_VERSION 3U
 #define COOKIEOS_BOOT_MAX_DRIVERS 16U
 
 typedef struct {
@@ -41,6 +41,10 @@ typedef struct {
     unsigned int driver_count;
     unsigned int reserved1;
     COOKIEOS_BOOT_DRIVER drivers[COOKIEOS_BOOT_MAX_DRIVERS];
+
+    /* Optional raw BMP file loaded from the EFI System Partition. */
+    unsigned long long splash_image;
+    unsigned long long splash_image_size;
 } COOKIEOS_BOOT_INFO;
 
 #endif
