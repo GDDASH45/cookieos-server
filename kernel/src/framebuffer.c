@@ -149,6 +149,79 @@ void framebuffer_init(const COOKIEOS_BOOT_INFO *info)
     framebuffer_clear();
 }
 
+static uint16_t read_le16(const uint8_t *p)
+{
+    return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
+}
+
+static uint32_t read_le32(const uint8_t *p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+/*
+ * Draw an uncompressed 24-bit or 32-bit Windows BMP, exactly 128x128.
+ * The image is centered on the GOP framebuffer.
+ */
+int framebuffer_draw_bmp(const void *data, size_t size)
+{
+    const uint8_t *bmp = (const uint8_t *)data;
+    uint32_t pixel_offset, dib_size, compression, row_size;
+    uint32_t x, y, bytes_per_pixel;
+    int32_t width, height;
+    uint16_t planes, bpp;
+    uint32_t abs_height;
+    uint32_t origin_x, origin_y;
+
+    if (!fb || !bmp || size < 54U || bmp[0] != 'B' || bmp[1] != 'M')
+        return 0;
+
+    pixel_offset = read_le32(bmp + 10);
+    dib_size = read_le32(bmp + 14);
+    if (dib_size < 40U || (size_t)14U + dib_size > size)
+        return 0;
+
+    width = (int32_t)read_le32(bmp + 18);
+    height = (int32_t)read_le32(bmp + 22);
+    planes = read_le16(bmp + 26);
+    bpp = read_le16(bmp + 28);
+    compression = read_le32(bmp + 30);
+
+    if (width != 128 || height == 0 || height == (-128 - 1) ||
+        (height != 128 && height != -128) || planes != 1U ||
+        (bpp != 24U && bpp != 32U) || compression != 0U)
+        return 0;
+
+    bytes_per_pixel = bpp / 8U;
+    row_size = (128U * bytes_per_pixel + 3U) & ~3U;
+    if ((size_t)pixel_offset > size ||
+        (size_t)row_size > (size - (size_t)pixel_offset) / 128U)
+        return 0;
+
+    abs_height = height < 0 ? (uint32_t)(-height) : (uint32_t)height;
+    if (abs_height != 128U)
+        return 0;
+
+    origin_x = fb_width > 128U ? (fb_width - 128U) / 2U : 0U;
+    origin_y = fb_height > 128U ? (fb_height - 128U) / 2U : 0U;
+
+    for (y = 0; y < 128U; ++y) {
+        uint32_t source_y = height > 0 ? 127U - y : y;
+        const uint8_t *row = bmp + pixel_offset +
+                             (size_t)source_y * row_size;
+        for (x = 0; x < 128U; ++x) {
+            const uint8_t *pixel = row + (size_t)x * bytes_per_pixel;
+            uint32_t color = ((uint32_t)pixel[2] << 16) |
+                             ((uint32_t)pixel[1] << 8) |
+                             (uint32_t)pixel[0];
+            put_pixel(origin_x + x, origin_y + y, color);
+        }
+    }
+
+    return 1;
+}
+
 void framebuffer_clear(void)
 {
     if (!fb)
