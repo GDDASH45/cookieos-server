@@ -14,6 +14,7 @@ static uint8_t autoexec_image[2U * 1024U * 1024U] __attribute__((aligned(16)));
 
 static __attribute__((noreturn)) void kernel_halt(void)
 {
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'H'));
     __asm__ __volatile__(
         "cli\n"
         "1: hlt\n"
@@ -122,10 +123,13 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
     );
 
     framebuffer_init(info);
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'F'));
     if (!framebuffer_available())
         kernel_halt();
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'A'));
 
     framebuffer_clear();
+    __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)'D'));
     framebuffer_write("\n========================================\n");
     framebuffer_write(" CookieOS Server 2026\n");
     framebuffer_write(" Modular Technology kernel\n");
