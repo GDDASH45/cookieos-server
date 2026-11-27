@@ -17,28 +17,39 @@ CFLAGS := -I$(EFI_INC) -I$(EFI_INC)/$(ARCH) \
 LDFLAGS := -nostdlib -znocombreloc -T $(EFI_LDS) \
            -shared -Bsymbolic
 
-TARGET := CookieBoot
-OBJECTS := main.o
+EFI_LIBS := -L$(EFI_LIB) -lefi -lgnuefi
+EFI_SECTIONS := -j .text -j .sdata -j .data \
+                -j .dynamic -j .dynsym -j .rel \
+                -j .rela -j .reloc
 
 .PHONY: all clean
 
-all: $(TARGET).efi
+all: BOOTX64.EFI CookieBoot.efi
+
+chainloader.o: chainloader.c
+	@echo "  CC      $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
 
 main.o: src/main.c
 	@echo "  CC      $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGET).so: $(OBJECTS)
+chainloader.so: chainloader.o
 	@echo "  LD      $@"
-	@$(LD) $(LDFLAGS) $(EFI_CRT0) $(OBJECTS) \
-		-L$(EFI_LIB) -lefi -lgnuefi -o $@
+	@$(LD) $(LDFLAGS) $(EFI_CRT0) $< $(EFI_LIBS) -o $@
 
-$(TARGET).efi: $(TARGET).so
+CookieBoot.so: main.o
+	@echo "  LD      $@"
+	@$(LD) $(LDFLAGS) $(EFI_CRT0) $< $(EFI_LIBS) -o $@
+
+BOOTX64.EFI: chainloader.so
 	@echo "  EFI     $@"
-	@$(OBJCOPY) -j .text -j .sdata -j .data \
-		-j .dynamic -j .dynsym -j .rel \
-		-j .rela -j .reloc \
-		--target=efi-app-$(ARCH) $< $@
+	@$(OBJCOPY) $(EFI_SECTIONS) --target=efi-app-$(ARCH) $< $@
+
+CookieBoot.efi: CookieBoot.so
+	@echo "  EFI     $@"
+	@$(OBJCOPY) $(EFI_SECTIONS) --target=efi-app-$(ARCH) $< $@
 
 clean:
-	@rm -f $(OBJECTS) $(TARGET).so $(TARGET).efi
+	@rm -f chainloader.o main.o chainloader.so CookieBoot.so \
+		BOOTX64.EFI CookieBoot.efi
