@@ -18,6 +18,7 @@
 #define USER_STACK   (USER_BASE + 511ULL * 4096ULL)
 #define ELF_PT_LOAD  1U
 #define ELF_PF_W     2U
+#define ELF_PF_X     1U
 
 typedef struct __attribute__((packed)) {
     uint16_t limit;
@@ -74,6 +75,7 @@ static uint64_t page_directories[512][512] __attribute__((aligned(4096)));
 static uint64_t user_page_table[512] __attribute__((aligned(4096)));
 static uint8_t user_app_memory[USER_PAGES * 4096U] __attribute__((aligned(4096)));
 static uint8_t user_stack_page[4096] __attribute__((aligned(4096)));
+static uint64_t user_page_flags[USER_PAGES];
 static uint8_t ring3_kernel_stack[16384] __attribute__((aligned(16)));
 static uint64_t user_entry;
 static uint64_t user_image_end;
@@ -117,7 +119,7 @@ static int load_elf_app(const void *image,size_t size)
 {
     const uint8_t *b=(const uint8_t*)image;
     const ELF64_HEADER *h;
-    uint64_t high=0; unsigned i;
+    uint64_t high=0; int entry_executable=0; unsigned i;
     if(!image||size<sizeof(ELF64_HEADER))return 0;
     h=(const ELF64_HEADER*)b;
     if(b[0]!=0x7f||b[1]!='E'||b[2]!='L'||b[3]!='F'||
@@ -133,10 +135,23 @@ static int load_elf_app(const void *image,size_t size)
         if(p->vaddr<USER_BASE||p->vaddr>USER_LIMIT||p->memsz>USER_LIMIT-p->vaddr)return 0;
         end=p->vaddr+p->memsz;off=p->vaddr-USER_BASE;
         if(end>high)high=end;
+        if((p->flags&ELF_PF_X)&&h->entry>=p->vaddr&&h->entry<end)
+            entry_executable=1;
+        {
+            uint64_t page_start=off&~0xFFFULL;
+            uint64_t page_end=(off+p->memsz+0xFFFULL)&~0xFFFULL;
+            for(uint64_t page=page_start;page<page_end;page+=4096ULL){
+                unsigned index=(unsigned)(page/4096ULL);
+                if(index>=USER_PAGES)return 0;
+                user_page_flags[index]=PAGE_PRESENT|PAGE_USER|
+                    ((p->flags&ELF_PF_W)?PAGE_WRITE:0)|
+                    ((p->flags&ELF_PF_X)?0:PAGE_NX);
+            }
+        }
         for(uint64_t j=0;j<p->filesz;j++)user_app_memory[off+j]=b[p->offset+j];
         if(end>USER_LIMIT)return 0;
     }
-    if(high<=USER_BASE||h->entry<USER_BASE||h->entry>=high)return 0;
+    if(high<=USER_BASE||h->entry<USER_BASE||h->entry>=high||!entry_executable)return 0;
     user_entry=h->entry;user_image_end=high;return 1;
 }
 static void setup_user_page_tables(void)
@@ -154,12 +169,8 @@ static void setup_user_page_tables(void)
     page_directories[1][0]=(uint64_t)(uintptr_t)user_page_table|PAGE_PRESENT|PAGE_WRITE|PAGE_USER;
     for(i=0;i<USER_PAGES;i++){
         uint64_t physical=(uint64_t)(uintptr_t)(user_app_memory+(size_t)i*4096U);
-        uint64_t flags=PAGE_PRESENT|PAGE_USER;
-        if(USER_BASE+(uint64_t)i*4096ULL<user_image_end) {
-            /* Applications are mapped writable; NX is not set on executable app pages. */
-            flags|=PAGE_WRITE;
-        } else flags|=PAGE_NX;
-        user_page_table[i]=physical|flags;
+        user_page_table[i]=user_page_flags[i]
+            ? physical|user_page_flags[i] : 0;
     }
     user_page_table[511]=((uint64_t)(uintptr_t)user_stack_page&~0xfffULL)|
                          PAGE_PRESENT|PAGE_WRITE|PAGE_USER|PAGE_NX;
