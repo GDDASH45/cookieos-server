@@ -94,8 +94,8 @@ void kernel_main(const COOKIEOS_BOOT_INFO *info)
      * ABI v1 predates the preloaded-driver array. Accept it so an older
      * CookieBoot on the ESP can still boot this kernel safely.
      */
-    if (info->version != 1U &&
-        info->version != COOKIEOS_BOOTINFO_VERSION)
+    if (info->version < 1U ||
+        info->version > COOKIEOS_BOOTINFO_VERSION)
         kernel_panic("Unsupported boot-information ABI version");
     __asm__ __volatile__("outb %0, $0xE9" : : "a"((unsigned char)0x56));
 
