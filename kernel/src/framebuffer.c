@@ -20,7 +20,7 @@ static uint32_t fb_format;
 static uint32_t cursor_x;
 static uint32_t cursor_y;
 static uint32_t foreground = 0x00D8E8F0U;
-static uint32_t background = 0x00101820U;
+static uint32_t background = 0x00000000U;
 
 static const uint8_t *glyph(char c)
 {
