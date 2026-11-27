@@ -532,7 +532,7 @@ static EFI_STATUS exit_boot_services_and_jump(
      * RDI remains the boot-info argument and RAX remains the kernel entry.
      */
     __asm__ __volatile__(
-        "movq %%rcx, %%cr3\\n\\t"
+        "movq %%rcx, %%cr3\n\t"
         "jmp *%%rax"
         :
         : "D"(Info), "a"(Entry), "c"(PageTableBase)
@@ -647,12 +647,12 @@ EFI_STATUS load_kernel_and_exit(
 
     Status = create_identity_page_tables(&PageTableBase);
     if (EFI_ERROR(Status)) {
-        Print(L"[ELF] Could not create identity page tables: %r\\r\\n",
+        Print(L"[ELF] Could not create identity page tables: %r\r\n",
               Status);
         goto fail;
     }
 
-    Print(L"[ELF] Exiting UEFI boot services...\\r\\n");
+    Print(L"[ELF] Exiting UEFI boot services...\r\n");
 
     Status = exit_boot_services_and_jump(
         ImageHandle, Info, PhysicalEntry, PageTableBase
